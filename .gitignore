@@ -1,0 +1,67 @@
+# ==========================================
+# 1. BẢO MẬT (SECURITY & SECRETS) - QUAN TRỌNG NHẤT
+# ==========================================
+.env
+.streamlit/secrets.toml
+*.pem
+*.key
+
+# ==========================================
+# 2. DỮ LIỆU & VECTOR DATABASE (KHÔNG PUSH LÊN GITHUB)
+# ==========================================
+# Bỏ qua toàn bộ dữ liệu thô, dữ liệu đã xử lý và cơ sở dữ liệu Chroma
+data/raw/
+data/raw_nghidinh/
+data/processed/
+data/vector_db/
+
+# Bỏ qua file cache của thuật toán BM25
+*.pkl
+
+# Bỏ qua các định dạng file nặng
+*.docx
+*.pdf
+*.txt
+*.json
+
+# (Tùy chọn) Chỉ giữ lại cấu trúc thư mục rỗng của thư mục data
+# Nếu muốn đẩy thư mục rỗng lên, hãy tạo 1 file .gitkeep rỗng trong các thư mục đó
+!data/.gitkeep
+!data/raw/.gitkeep
+!data/raw_nghidinh/.gitkeep
+
+# ==========================================
+# 3. MÔI TRƯỜNG PYTHON & CACHE
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Môi trường ảo (Virtual Environments)
+venv/
+.venv/
+env/
+.env_rag/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ==========================================
+# 4. HỆ ĐIỀU HÀNH & IDE (TRÌNH SOẠN THẢO)
+# ==========================================
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# VS Code / PyCharm
+.vscode/
+.idea/
+*.swp
