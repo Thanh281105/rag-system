@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Rust
+target/
+*.pdb
+
+# Environment
+.env
+*.env.local
+
+# Data
+data/raw/
+data/processed/
+data/synthetic/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models cache
+models_cache/
+*.onnx
+
+# Qdrant
+qdrant_storage/

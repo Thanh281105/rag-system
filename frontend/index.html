@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Hệ thống trả lời câu hỏi pháp lý thông minh sử dụng AI đa tác nhân">
+    <title>⚖️ Legal RAG - Trợ lý Pháp lý AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Animated background -->
+    <div class="bg-gradient"></div>
+    <div class="bg-particles" id="particles"></div>
+    
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">⚖️</span>
+                <div>
+                    <h1>Legal RAG</h1>
+                    <p class="tagline">Trợ lý Pháp lý AI Đa tác nhân</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-green" id="badge-status">
+                    <span class="status-dot"></span>
+                    Online
+                </span>
+                <span class="badge badge-blue">Groq LLaMA-3.3</span>
+                <span class="badge badge-purple">RAPTOR + HyDE</span>
+            </div>
+        </header>
+
+        <!-- Main Chat Area -->
+        <main class="chat-container" id="chatContainer">
+            <!-- Welcome Message -->
+            <div class="welcome-card" id="welcomeCard">
+                <div class="welcome-icon">🏛️</div>
+                <h2>Chào mừng đến với Legal RAG</h2>
+                <p>Hệ thống trả lời câu hỏi pháp lý thông minh, sử dụng kiến trúc Multi-Agent với RAPTOR Tree Indexing và HyDE Query Transformation.</p>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <span class="feature-icon">🤖</span>
+                        <h3>4 AI Agents</h3>
+                        <p>Router → RAG → Analyst → Compliance</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">🌳</span>
+                        <h3>RAPTOR Tree</h3>
+                        <p>Cây tri thức phân cấp</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">🔍</span>
+                        <h3>Hybrid Search</h3>
+                        <p>Dense + BM25 + Reranking</p>
+                    </div>
+                    <div class="feature-card">
+                        <span class="feature-icon">⚡</span>
+                        <h3>Rust Backend</h3>
+                        <p>Actix-Web hiệu năng cao</p>
+                    </div>
+                </div>
+                <div class="example-questions">
+                    <p class="example-label">💡 Câu hỏi mẫu:</p>
+                    <button class="example-btn" onclick="askExample(this)">Điều kiện thành lập công ty cổ phần là gì?</button>
+                    <button class="example-btn" onclick="askExample(this)">Quyền và nghĩa vụ của cổ đông phổ thông?</button>
+                    <button class="example-btn" onclick="askExample(this)">Thủ tục giải thể doanh nghiệp theo Luật Doanh nghiệp?</button>
+                </div>
+            </div>
+
+            <!-- Messages will be appended here -->
+            <div id="messagesArea"></div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="input-container">
+            <form id="queryForm" onsubmit="handleSubmit(event)">
+                <div class="input-wrapper">
+                    <textarea
+                        id="queryInput"
+                        placeholder="Nhập câu hỏi pháp lý của bạn..."
+                        rows="1"
+                        autofocus
+                    ></textarea>
+                    <button type="submit" id="submitBtn" class="send-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                        </svg>
+                    </button>
+                </div>
+                <p class="input-hint">
+                    Powered by <strong>Groq LLaMA-3.3-70b</strong> · Rust Backend · RAPTOR + HyDE
+                </p>
+            </form>
+        </footer>
+    </div>
+
+    <!-- Agent Trace Modal -->
+    <div class="modal-overlay" id="traceModal" onclick="closeTrace(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeTrace()">✕</button>
+            <h2>🔍 Agent Trace</h2>
+            <div id="traceContent"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
