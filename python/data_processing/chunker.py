@@ -166,15 +166,19 @@ def chunk_documents(documents: list[dict]) -> list[TextChunk]:
         chunk_texts = chunk_with_overlap(sections)
         
         for ct in chunk_texts:
+            # Tiêm metadata (Tên văn bản) trực tiếp vào nội dung chunk
+            # Giúp bảo toàn ngữ cảnh, tránh việc LLM bị mất dấu nguồn gốc văn bản
+            contextualized_text = f"[Văn bản: {doc_title}]\n{ct}"
+            
             chunk = TextChunk(
-                text=ct,
+                text=contextualized_text,
                 doc_id=doc_id,
                 chunk_id=chunk_counter,
                 doc_title=doc_title,
                 level=0,
                 metadata={
                     "source": "UTS_VLC",
-                    "tokens": count_tokens(ct),
+                    "tokens": count_tokens(contextualized_text),
                 }
             )
             all_chunks.append(chunk)

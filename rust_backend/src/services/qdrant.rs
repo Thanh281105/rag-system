@@ -1,10 +1,10 @@
 //! Qdrant service - truy vấn vector database
 
 use anyhow::Result;
-use qdrant_client::qdrant::{
-    QueryPointsBuilder, Value,
-};
+use md5::{Digest, Md5};
+use qdrant_client::qdrant::{QueryPointsBuilder, SparseVector, Value};
 use qdrant_client::Qdrant;
+use std::collections::HashMap;
 use tracing::info;
 
 use crate::config::AppConfig;
@@ -63,6 +63,74 @@ impl QdrantService {
             .collect();
 
         info!("Qdrant dense search: {} results", documents.len());
+        Ok(documents)
+    }
+
+    /// Helper tạo vector thưa (sparse vector) tương thích 100% với Python (MD5 modulo 100k)
+    fn text_to_sparse(text: &str) -> (Vec<u32>, Vec<f32>) {
+        let mut word_freq: HashMap<u32, f32> = HashMap::new();
+        let words = text.to_lowercase();
+
+        for w in words.split_whitespace() {
+            let mut hasher = Md5::new();
+            hasher.update(w.as_bytes());
+            let result = hasher.finalize();
+            let hex_str = hex::encode(result);
+
+            if let Ok(big_int) = u128::from_str_radix(&hex_str, 16) {
+                let h = (big_int % 100000) as u32;
+                *word_freq.entry(h).or_insert(0.0) += 1.0;
+            }
+        }
+
+        let mut indices = Vec::new();
+        let mut values = Vec::new();
+        for (k, v) in word_freq {
+            indices.push(k);
+            values.push(v);
+        }
+
+        (indices, values)
+    }
+
+    /// Tìm kiếm keyword (sparse vector / BM25-like)
+    pub async fn search_sparse(
+        &self,
+        query_text: &str,
+        top_k: u64,
+    ) -> Result<Vec<LegalDocument>> {
+        let (indices, values) = Self::text_to_sparse(query_text);
+
+        let results = self
+            .client
+            .query(
+                QueryPointsBuilder::new(&self.collection)
+                    .query(qdrant_client::qdrant::Query::from(
+                        qdrant_client::qdrant::VectorInput::new_sparse(indices, values),
+                    ))
+                    .using("sparse")
+                    .limit(top_k)
+                    .with_payload(true),
+            )
+            .await?;
+
+        let documents: Vec<LegalDocument> = results
+            .result
+            .into_iter()
+            .map(|point| {
+                let payload = point.payload;
+                LegalDocument {
+                    text: extract_string(&payload, "text"),
+                    node_id: extract_integer(&payload, "node_id"),
+                    level: extract_integer(&payload, "level") as i32,
+                    doc_title: extract_string(&payload, "doc_title"),
+                    doc_id: extract_integer(&payload, "doc_id"),
+                    score: point.score as f64,
+                }
+            })
+            .collect();
+
+        info!("Qdrant sparse search: {} results", documents.len());
         Ok(documents)
     }
 

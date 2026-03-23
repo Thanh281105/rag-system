@@ -7,6 +7,7 @@ use anyhow::Result;
 pub struct AppConfig {
     pub groq_api_key: String,
     pub groq_model: String,
+    pub groq_fast_model: String,
     pub qdrant_url: String,
     pub qdrant_collection: String,
     pub host: String,
@@ -22,6 +23,8 @@ impl AppConfig {
                 .unwrap_or_else(|_| String::new()),
             groq_model: std::env::var("GROQ_MODEL")
                 .unwrap_or_else(|_| "llama-3.3-70b-versatile".to_string()),
+            groq_fast_model: std::env::var("GROQ_FAST_MODEL")
+                .unwrap_or_else(|_| "llama-3.1-8b-instant".to_string()),
             qdrant_url: std::env::var("QDRANT_URL")
                 .unwrap_or_else(|_| "http://localhost:6333".to_string()),
             qdrant_collection: std::env::var("QDRANT_COLLECTION")

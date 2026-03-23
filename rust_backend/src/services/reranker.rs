@@ -6,7 +6,7 @@ use anyhow::Result;
 use tracing::info;
 
 use crate::models::document::LegalDocument;
-use crate::services::groq::GroqService;
+use crate::services::groq::{GroqService, ModelTier};
 
 pub struct RerankerService;
 
@@ -31,11 +31,12 @@ impl RerankerService {
                  Câu hỏi: {query}\n\n\
                  Văn bản: {}\n\n\
                  CHỉ trả lời MỘT số thập phân (ví dụ: 0.85):",
-                &doc.text[..doc.text.len().min(500)]
+                &doc.text[..doc.text.floor_char_boundary(500)]
             );
 
             let score_str = groq
                 .chat(
+                    ModelTier::Smart,
                     "Bạn là hệ thống scoring. Chỉ trả lời một số.",
                     &prompt,
                     0.0,

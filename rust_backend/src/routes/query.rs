@@ -9,7 +9,7 @@ use crate::agents::compliance::ComplianceAgent;
 use crate::agents::rag::RagAgent;
 use crate::agents::router::{QueryIntent, RouterAgent};
 use crate::models::query::{
-    AgentTrace, ComplianceResult, QueryRequest, QueryResponse, SourceDocument,
+    AgentTrace, ChatHistoryMessage, ComplianceResult, QueryRequest, QueryResponse, SourceDocument,
 };
 use crate::services::groq::GroqService;
 use crate::services::qdrant::QdrantService;
@@ -23,12 +23,22 @@ pub async fn handle_query(
     let start = Instant::now();
     let question = &body.question;
     let top_k = body.top_k;
+    let history = &body.history;
 
-    info!("📨 Query: '{}'", &question[..question.len().min(80)]);
+    info!("📨 Query: '{}' (history: {} msgs)", &question[..question.floor_char_boundary(80)], history.len());
 
-    // ─── Step 1: Router Agent ────────────────────────────
-    let intent = match RouterAgent::classify(&groq, question).await {
-        Ok(intent) => intent,
+    // Xây dựng ngữ cảnh hội thoại để bổ sung cho câu hỏi
+    let contextualized_question = build_contextualized_question(question, history);
+
+    // ─── Step 1: Tối ưu hoá (Parallel Execution) ──────────────────────
+    // Chạy song song Router (phân loại câu hỏi) & RagAgent (mở rộng câu hỏi)
+    let intent_future = RouterAgent::classify(&groq, &contextualized_question);
+    let expansion_future = RagAgent::expand_queries(&groq, &contextualized_question);
+
+    let (intent_res, expansion_res) = tokio::join!(intent_future, expansion_future);
+
+    let intent = match intent_res {
+        Ok(i) => i,
         Err(e) => {
             return HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": format!("Router error: {e}")
@@ -36,9 +46,18 @@ pub async fn handle_query(
         }
     };
 
+    let expanded_queries = match expansion_res {
+        Ok(eq) => eq,
+        Err(e) => {
+            return HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": format!("Multi-Query Expansion error: {e}")
+            }));
+        }
+    };
+
     // Casual → trả lời trực tiếp
     if intent == QueryIntent::Casual {
-        let casual_answer = RouterAgent::casual_response(&groq, question)
+        let casual_answer = RouterAgent::casual_response(&groq, &contextualized_question)
             .await
             .unwrap_or_else(|_| "Xin lỗi, tôi không thể xử lý yêu cầu này.".to_string());
 
@@ -61,9 +80,14 @@ pub async fn handle_query(
         });
     }
 
-    // ─── Step 2: RAG Agent ───────────────────────────────
-    let (evidence, hyde_document) = match RagAgent::retrieve(&groq, &qdrant, question, top_k).await
-    {
+    // ─── Step 2: RAG Agent (Retrieval) ───────────────────────────────
+    let evidence = match RagAgent::retrieve_with_expanded(
+        &groq, 
+        &qdrant, 
+        &contextualized_question, 
+        &expanded_queries, 
+        top_k
+    ).await {
         Ok(result) => result,
         Err(e) => {
             return HttpResponse::InternalServerError().json(serde_json::json!({
@@ -73,7 +97,7 @@ pub async fn handle_query(
     };
 
     // ─── Step 3: Analyst Agent ───────────────────────────
-    let analyst_answer = match AnalystAgent::analyze(&groq, question, &evidence).await {
+    let analyst_answer = match AnalystAgent::analyze(&groq, &contextualized_question, &evidence).await {
         Ok(answer) => answer,
         Err(e) => {
             return HttpResponse::InternalServerError().json(serde_json::json!({
@@ -119,7 +143,7 @@ pub async fn handle_query(
         sources,
         agent_trace: AgentTrace {
             router_decision: "LEGAL".to_string(),
-            hyde_document,
+            hyde_document: expanded_queries, // Đổi tên logic ở mức payload JSON nhưng tái sử dụng field
             retrieved_count: evidence.len(),
             reranked_count: evidence.len(),
             analyst_reasoning: analyst_answer,
@@ -127,4 +151,26 @@ pub async fn handle_query(
         },
         processing_time_ms: processing_time,
     })
+}
+
+/// Xây dựng câu hỏi có ngữ cảnh từ lịch sử hội thoại
+fn build_contextualized_question(
+    question: &str,
+    history: &[ChatHistoryMessage],
+) -> String {
+    if history.is_empty() {
+        return question.to_string();
+    }
+
+    // Giữ tối đa 3 cặp hội thoại gần nhất (6 messages)
+    let recent: Vec<&ChatHistoryMessage> = history.iter().rev().take(6).collect::<Vec<_>>().into_iter().rev().collect();
+
+    let mut context = String::from("Lịch sử hội thoại gần đây:\n");
+    for msg in &recent {
+        let role_label = if msg.role == "user" { "Người hỏi" } else { "Trợ lý" };
+        let content_preview = &msg.content[..msg.content.floor_char_boundary(200)];
+        context.push_str(&format!("- {}: {}\n", role_label, content_preview));
+    }
+    context.push_str(&format!("\nCâu hỏi hiện tại: {}", question));
+    context
 }

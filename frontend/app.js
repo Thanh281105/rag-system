@@ -3,8 +3,9 @@
  * Handles chat interactions with the Rust backend
  */
 
-const API_BASE = 'http://127.0.0.1:8080';
+const API_BASE = '';
 let isProcessing = false;
+let chatHistory = []; // Lưu lịch sử hội thoại
 
 // ─── Init ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -90,7 +91,7 @@ async function handleSubmit(e) {
         const res = await fetch(`${API_BASE}/api/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question, top_k: 5 }),
+            body: JSON.stringify({ question, top_k: 5, history: chatHistory }),
         });
 
         const data = await res.json();
@@ -99,6 +100,12 @@ async function handleSubmit(e) {
         if (data.error) {
             addBotMessage(`❌ Lỗi: ${data.error}`, [], null, 0);
         } else {
+            // Lưu vào lịch sử hội thoại
+            chatHistory.push({ role: 'user', content: question });
+            chatHistory.push({ role: 'assistant', content: data.answer });
+            // Giữ tối đa 10 tin nhắn gần nhất
+            if (chatHistory.length > 10) chatHistory = chatHistory.slice(-10);
+
             addBotMessage(
                 data.answer,
                 data.sources || [],
@@ -221,7 +228,7 @@ function showTrace(dataId) {
             <p>Decision: <strong>${trace.router_decision}</strong></p>
         </div>
         <div class="trace-step">
-            <h3>2. 📝 HyDE Document</h3>
+            <h3>2. 📝 Multi-Query Expansion</h3>
             <pre>${escapeHtml(trace.hyde_document || 'N/A')}</pre>
         </div>
         <div class="trace-step">

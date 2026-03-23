@@ -2,12 +2,21 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Tin nhắn trong lịch sử hội thoại
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ChatHistoryMessage {
+    pub role: String,   // "user" hoặc "assistant"
+    pub content: String,
+}
+
 /// Request gửi câu hỏi pháp lý
 #[derive(Debug, Deserialize)]
 pub struct QueryRequest {
     pub question: String,
     #[serde(default = "default_top_k")]
     pub top_k: usize,
+    #[serde(default)]
+    pub history: Vec<ChatHistoryMessage>,
 }
 
 fn default_top_k() -> usize {

@@ -4,7 +4,7 @@
 use anyhow::Result;
 use tracing::info;
 
-use crate::services::groq::GroqService;
+use crate::services::groq::{GroqService, ModelTier};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryIntent {
@@ -32,6 +32,7 @@ impl RouterAgent {
     pub async fn classify(groq: &GroqService, question: &str) -> Result<QueryIntent> {
         let response = groq
             .chat(
+                ModelTier::Fast,
                 ROUTER_SYSTEM_PROMPT,
                 question,
                 0.0,
@@ -45,13 +46,14 @@ impl RouterAgent {
             QueryIntent::Casual
         };
 
-        info!("Router: {:?} for '{}'", intent, &question[..question.len().min(50)]);
+        info!("Router: {:?} for '{}'", intent, &question[..question.floor_char_boundary(50)]);
         Ok(intent)
     }
 
     /// Trả lời casual (không cần RAG)
     pub async fn casual_response(groq: &GroqService, question: &str) -> Result<String> {
         groq.chat(
+            ModelTier::Smart,
             "Bạn là trợ lý pháp lý thân thiện. Trả lời ngắn gọn, lịch sự bằng tiếng Việt. \
              Nếu người dùng hỏi gì liên quan pháp lý, khuyên họ hỏi lại cụ thể hơn.",
             question,

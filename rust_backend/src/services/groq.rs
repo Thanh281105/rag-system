@@ -7,11 +7,18 @@ use tracing::info;
 
 use crate::config::AppConfig;
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ModelTier {
+    Fast,
+    Smart,
+}
+
 #[derive(Clone)]
 pub struct GroqService {
     client: Client,
     api_key: String,
     model: String,
+    fast_model: String,
 }
 
 #[derive(Serialize)]
@@ -44,19 +51,26 @@ impl GroqService {
             client: Client::new(),
             api_key: config.groq_api_key.clone(),
             model: config.groq_model.clone(),
+            fast_model: config.groq_fast_model.clone(),
         }
     }
 
     /// Gọi Groq API với system prompt và user message
     pub async fn chat(
         &self,
+        tier: ModelTier,
         system_prompt: &str,
         user_message: &str,
         temperature: f64,
         max_tokens: u32,
     ) -> Result<String> {
+        let requested_model = match tier {
+            ModelTier::Fast => &self.fast_model,
+            ModelTier::Smart => &self.model,
+        };
+
         let request = ChatRequest {
-            model: self.model.clone(),
+            model: requested_model.clone(),
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),
@@ -80,8 +94,19 @@ impl GroqService {
             .send()
             .await?;
 
+        let status = response.status();
         let response_text = response.text().await?;
-        let chat_response: ChatResponse = serde_json::from_str(&response_text)?;
+
+        if !status.is_success() {
+            tracing::error!("Groq API error ({}): {}", status, &response_text[..response_text.len().min(500)]);
+            anyhow::bail!("Groq API error ({}): {}", status, &response_text[..response_text.len().min(300)]);
+        }
+
+        let chat_response: ChatResponse = serde_json::from_str(&response_text)
+            .map_err(|e| {
+                tracing::error!("Failed to parse Groq response: {}. Raw: {}", e, &response_text[..response_text.len().min(500)]);
+                anyhow::anyhow!("Failed to parse Groq response: {}", e)
+            })?;
 
         let content = chat_response
             .choices
@@ -96,12 +121,18 @@ impl GroqService {
     /// Chat với messages tùy chỉnh
     pub async fn chat_with_messages(
         &self,
+        tier: ModelTier,
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: u32,
     ) -> Result<String> {
+        let requested_model = match tier {
+            ModelTier::Fast => &self.fast_model,
+            ModelTier::Smart => &self.model,
+        };
+
         let request = ChatRequest {
-            model: self.model.clone(),
+            model: requested_model.clone(),
             messages,
             temperature,
             max_tokens,

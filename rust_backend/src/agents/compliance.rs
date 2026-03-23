@@ -6,7 +6,7 @@ use tracing::{info, warn};
 
 use crate::models::document::LegalDocument;
 use crate::models::query::ComplianceResult;
-use crate::services::groq::GroqService;
+use crate::services::groq::{GroqService, ModelTier};
 
 const COMPLIANCE_SYSTEM_PROMPT: &str = r#"
 Bạn là Compliance Agent - "Thẩm phán" kiểm tra tính chính xác pháp lý.
@@ -40,7 +40,7 @@ impl ComplianceAgent {
         let evidence_text: String = evidence
             .iter()
             .enumerate()
-            .map(|(i, doc)| format!("[Bằng chứng {}]: {}", i + 1, &doc.text[..doc.text.len().min(500)]))
+            .map(|(i, doc)| format!("[Bằng chứng {}]: {}", i + 1, &doc.text[..doc.text.floor_char_boundary(500)]))
             .collect::<Vec<_>>()
             .join("\n\n");
 
@@ -52,7 +52,7 @@ impl ComplianceAgent {
         );
 
         let response = groq
-            .chat(COMPLIANCE_SYSTEM_PROMPT, &user_prompt, 0.0, 512)
+            .chat(ModelTier::Smart, COMPLIANCE_SYSTEM_PROMPT, &user_prompt, 0.0, 512)
             .await?;
 
         // Parse JSON response
@@ -105,6 +105,7 @@ impl ComplianceAgent {
 
             current_answer = groq
                 .chat(
+                    ModelTier::Smart,
                     "Bạn là chuyên gia pháp luật. Viết câu trả lời chính xác.",
                     &retry_prompt,
                     0.1,

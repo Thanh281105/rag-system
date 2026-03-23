@@ -138,12 +138,14 @@ class QdrantWrapper:
     def _text_to_sparse(self, text: str) -> tuple[list[int], list[float]]:
         """
         Tạo sparse vector đơn giản từ text (word frequency based).
-        Sử dụng hash để map từ → index.
+        Sử dụng MD5 hash để đảm bảo tính nhất quán giữa index và search (Python/Rust).
         """
+        import hashlib
         words = text.lower().split()
         word_freq = {}
         for w in words:
-            h = hash(w) % 100000  # Map to fixed sparse dim
+            # MD5 hash -> int -> modulo 100000 cho sparse dimension
+            h = int(hashlib.md5(w.encode('utf-8')).hexdigest(), 16) % 100000
             word_freq[h] = word_freq.get(h, 0) + 1
         
         indices = list(word_freq.keys())
