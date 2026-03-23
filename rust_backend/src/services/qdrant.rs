@@ -66,12 +66,38 @@ impl QdrantService {
         Ok(documents)
     }
 
-    /// Helper tạo vector thưa (sparse vector) tương thích 100% với Python (MD5 modulo 100k)
+    /// Vietnamese stop-words - các từ phổ biến không mang ý nghĩa pháp lý
+    /// Loại bỏ để sparse vector tập trung vào keywords quan trọng
+    const VIETNAMESE_STOP_WORDS: &'static [&'static str] = &[
+        // Giới từ / Liên từ
+        "của", "và", "các", "có", "được", "trong", "là", "cho", "với", "về",
+        "theo", "từ", "đến", "tại", "bởi", "do", "khi", "nếu", "thì", "mà",
+        "hoặc", "hay", "cũng", "đã", "sẽ", "đang", "để", "bị", "không",
+        // Đại từ
+        "này", "đó", "những", "một", "các", "mỗi", "mọi", "tất", "cả",
+        // Trợ từ / Phụ từ
+        "rằng", "thì", "lại", "vẫn", "còn", "nên", "phải", "cần",
+        "như", "trên", "dưới", "trước", "sau", "giữa", "ngoài",
+        // Từ nối phổ biến trong văn bản luật (nhưng không mang thông tin pháp lý)
+        "quy", "định", "việc", "người", "nhưng", "vào", "ra",
+    ];
+
+    /// Helper tạo vector thưa (sparse vector) tương thích 100% với Python (MD5 modulo 100k).
+    /// Cải tiến: loại bỏ stop-words tiếng Việt + log-scaled TF (gần BM25 hơn).
     fn text_to_sparse(text: &str) -> (Vec<u32>, Vec<f32>) {
         let mut word_freq: HashMap<u32, f32> = HashMap::new();
         let words = text.to_lowercase();
 
+        // Xây dựng HashSet stop-words để tra cứu O(1)
+        let stop_set: std::collections::HashSet<&str> =
+            Self::VIETNAMESE_STOP_WORDS.iter().copied().collect();
+
         for w in words.split_whitespace() {
+            // Bỏ qua stop-words và từ quá ngắn (1 ký tự)
+            if stop_set.contains(w) || w.chars().count() <= 1 {
+                continue;
+            }
+
             let mut hasher = Md5::new();
             hasher.update(w.as_bytes());
             let result = hasher.finalize();
@@ -85,9 +111,10 @@ impl QdrantService {
 
         let mut indices = Vec::new();
         let mut values = Vec::new();
-        for (k, v) in word_freq {
+        for (k, raw_tf) in word_freq {
             indices.push(k);
-            values.push(v);
+            // Log-scaled TF: 1 + ln(tf) — giảm ảnh hưởng của từ lặp quá nhiều
+            values.push(1.0 + raw_tf.ln());
         }
 
         (indices, values)

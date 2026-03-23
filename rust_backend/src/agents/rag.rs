@@ -97,19 +97,36 @@ impl RagAgent {
         info!("Dense: {} results, Sparse: {} results", dense_docs.len(), sparse_docs.len());
 
         // 3. Reciprocal Rank Fusion (RRF)
+        // Tải config để lấy RRF weights
+        let config = crate::config::AppConfig::from_env().unwrap_or_else(|_| crate::config::AppConfig {
+            groq_api_key: String::new(),
+            groq_model: String::new(),
+            groq_fast_model: String::new(),
+            qdrant_url: String::new(),
+            qdrant_collection: String::new(),
+            rrf_dense_weight: 0.5,
+            rrf_sparse_weight: 0.5,
+            rrf_k: 60,
+            host: String::new(),
+            port: 8080,
+        });
+
+        // 3. Reciprocal Rank Fusion (RRF)
         let mut rrf_scores: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
         let mut doc_map: std::collections::HashMap<i64, LegalDocument> = std::collections::HashMap::new();
 
-        let k_rrf = 60.0;
+        let k_rrf = config.rrf_k as f64;
+        let dense_weight = config.rrf_dense_weight;
+        let sparse_weight = config.rrf_sparse_weight;
 
         for (rank, doc) in dense_docs.into_iter().enumerate() {
-            let score = 1.0 / (k_rrf + (rank as f64) + 1.0);
+            let score = dense_weight * (1.0 / (k_rrf + (rank as f64) + 1.0));
             *rrf_scores.entry(doc.node_id).or_insert(0.0) += score;
             doc_map.insert(doc.node_id, doc);
         }
 
         for (rank, doc) in sparse_docs.into_iter().enumerate() {
-            let score = 1.0 / (k_rrf + (rank as f64) + 1.0);
+            let score = sparse_weight * (1.0 / (k_rrf + (rank as f64) + 1.0));
             *rrf_scores.entry(doc.node_id).or_insert(0.0) += score;
             doc_map.entry(doc.node_id).or_insert(doc);
         }

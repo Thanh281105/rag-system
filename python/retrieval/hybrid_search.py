@@ -8,7 +8,7 @@ from rich.console import Console
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
-from config import TOP_K_RETRIEVAL
+from config import TOP_K_RETRIEVAL, RRF_DENSE_WEIGHT, RRF_SPARSE_WEIGHT, RRF_K
 from retrieval.qdrant_client import QdrantWrapper
 
 console = Console()
@@ -17,9 +17,9 @@ console = Console()
 def reciprocal_rank_fusion(
     dense_results: list[dict],
     sparse_results: list[dict],
-    k: int = 60,
-    dense_weight: float = 0.6,
-    sparse_weight: float = 0.4,
+    k: int = RRF_K,
+    dense_weight: float = RRF_DENSE_WEIGHT,
+    sparse_weight: float = RRF_SPARSE_WEIGHT,
 ) -> list[dict]:
     """
     Kết hợp kết quả Dense + Sparse bằng Reciprocal Rank Fusion (RRF).
@@ -69,8 +69,8 @@ def hybrid_search(
     query_text: str,
     qdrant: QdrantWrapper = None,
     top_k: int = TOP_K_RETRIEVAL,
-    dense_weight: float = 0.6,
-    sparse_weight: float = 0.4,
+    dense_weight: float = RRF_DENSE_WEIGHT,
+    sparse_weight: float = RRF_SPARSE_WEIGHT,
 ) -> list[dict]:
     """
     Thực hiện Hybrid Search = Dense + Sparse + RRF.

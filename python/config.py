@@ -58,3 +58,10 @@ GROQ_TEMPERATURE = 0.1  # Low temperature cho câu trả lời pháp lý chính 
 # ─── Retrieval Configuration ────────────────────────────
 TOP_K_RETRIEVAL = 20   # Số lượng kết quả hybrid search
 TOP_K_RERANK = 5       # Số lượng kết quả sau reranking
+
+# ─── RRF (Reciprocal Rank Fusion) Configuration ─────────
+# Trọng số cho Hybrid Search: dense (ngữ nghĩa) vs sparse (keyword/BM25)
+# Domain pháp lý VN có mật độ keyword cao → nên tăng sparse weight
+RRF_DENSE_WEIGHT = float(os.getenv("RRF_DENSE_WEIGHT", "0.5"))
+RRF_SPARSE_WEIGHT = float(os.getenv("RRF_SPARSE_WEIGHT", "0.5"))
+RRF_K = int(os.getenv("RRF_K", "60"))  # Hằng số RRF (cao hơn → ít phân biệt rank)

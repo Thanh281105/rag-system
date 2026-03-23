@@ -1,4 +1,5 @@
 Workflow Dự Án: Hệ thống Agentic RAG Pháp lý Đa tác nhân (Tích hợp HyDE & RAPTOR) với Backend Rust
+
 1. Tổng quan Kiến trúc (Architecture Overview)
 Hệ thống là sự kết hợp giữa kiến trúc truy xuất nâng cao (Advanced RAG) và luồng suy luận Đa tác nhân (Multi-Agent), sử dụng sức mạnh của Groq API (miễn phí, tốc độ cao) và được tối ưu hóa toàn diện bằng backend viết bằng ngôn ngữ Rust để đạt độ trễ thấp nhất.
 
@@ -21,38 +22,38 @@ Gọi Groq API (LLaMA-3) tóm tắt từng cụm, tiếp tục lặp lại đệ
 
 Lưu trữ: Đưa toàn bộ các nút (nodes) của cây RAPTOR vào Qdrant (Vector Database viết bằng Rust).
 
-3. Giai đoạn 2: Biến đổi Truy vấn với HyDE (Query Transformation)
-Đây là tuyến phòng thủ đầu tiên khi nhận câu hỏi từ người dùng nhằm mở rộng ngữ cảnh.
+1. Giai đoạn 2: Biến đổi Truy vấn với Multi-Query Expansion (Query Transformation)
+Đây là tuyến phòng thủ đầu tiên khi nhận câu hỏi từ người dùng nhằm mở rộng ngữ cảnh, thay thế hoàn toàn cho thuật toán HyDE để tránh bị "ngộ độc vector" do LLM ảo giác ra số hiệu luật.
 
-Sinh tài liệu giả định: Ngay khi nhận câu hỏi, LLM sẽ sinh ra một câu trả lời nháp (có thể chứa thông tin chưa chuẩn xác nhưng cấu trúc và từ vựng mang đậm tính pháp lý).
+Mở rộng Đa truy vấn (Multi-Query): Hệ thống dùng LLM (Groq) để phân tích câu hỏi gốc và sinh ra 3 biến thể câu hỏi khác nhau nhằm tăng cơ hội vét cạn (recall) tài liệu.
 
-Mã hóa (Embedding): Chuyển đổi câu trả lời giả định này thành vector để chuẩn bị cho quá trình tìm kiếm.
+Mã hóa (Embedding): Chuyển đổi tất cả các biến thể truy vấn này thành vector để chuẩn bị tìm kiếm.
 
-4. Giai đoạn 3: Truy xuất Lai & Xếp hạng lại (Hybrid Search & Reranking)
-Hybrid Search: Đối chiếu vector của HyDE vào Qdrant kết hợp tìm kiếm ngữ nghĩa (Dense Vector) và tìm kiếm từ khóa chính xác (BM25 - Sparse Vector) để đảm bảo không trượt các số hiệu luật cụ thể.
+1. Giai đoạn 3: Truy xuất Lai & Xếp hạng lại (Hybrid Search & Reranking)
+Hybrid Search: Tìm kiếm trên Qdrant kết hợp tìm ngữ nghĩa (Dense Vector) và tìm từ khóa chính xác (BM25 - Sparse Vector có áp dụng Log-scaled TF và loại bỏ Stop-words tiếng Việt). Hợp nhất kết quả bằng thuật toán RRF.
 
-Reranking: Top 20 kết quả thu về sẽ đi qua một mô hình Cross-encoder chạy cục bộ (như bge-reranker) để chấm điểm chéo từng tài liệu với câu hỏi gốc, giữ lại đúng 5 đoạn ngữ cảnh giá trị nhất.
+Reranking: Gọi hệ thống Microservice Python bằng HTTP để chạy mô hình Cross-encoder cục bộ (bge-reranker-v2-m3). Tốc độ siêu tốc thông qua batch-processing, chấm điểm chéo từng tài liệu để lấy lại chính xác top 5 đoạn ngữ cảnh giá trị nhất.
 
-5. Giai đoạn 4: Điều phối Đa tác nhân (Agentic Workflow) bằng Rust
+1. Giai đoạn 4: Điều phối Đa tác nhân (Agentic Workflow) bằng Rust
 Thay vì dùng Python FastAPI thông thường, backend được kiến trúc hoàn toàn bằng Rust để thể hiện năng lực kỹ sư hệ thống.
 
 Backend Framework: Sử dụng Actix-Web để xử lý API đồng thời với hiệu năng cực cao và an toàn bộ nhớ.
 
 AI SDK: Sử dụng framework rig-rs (Rust) để thiết lập luồng giao tiếp với Groq API và Qdrant.
 
-Luồng Đa tác nhân (Lấy cảm hứng từ hệ thống Compliance):
+Luồng Đa tác nhân:
 
 Router Agent: Nhận câu hỏi, đánh giá ý định để quyết định xem có cần tra cứu luật hay chỉ là giao tiếp thông thường.
 
-RAG Agent: Thực thi toàn bộ Giai đoạn 2 và 3 (HyDE + Hybrid Search + Reranking) để lấy bằng chứng pháp lý.
+RAG Agent: Thực thi toàn bộ Giai đoạn 2 và 3 (Multi-Query Expansion + Hybrid Search + Reranking) để lấy bằng chứng pháp lý.
 
 Analyst Agent: Đọc bằng chứng từ RAG Agent và sinh ra câu trả lời lập luận từng bước.
 
 Consistency/Compliance Agent: Đóng vai trò "Thẩm phán". Tác nhân này đối chiếu chéo câu trả lời của Analyst Agent với các đoạn luật gốc để bắt lỗi logic hoặc ảo giác (hallucination). Nếu phát hiện lỗi, nó yêu cầu sinh lại câu trả lời.
 
-6. Giai đoạn 5: Đánh giá Tự động bằng Dữ liệu Tổng hợp (Synthetic Data Evaluation)
-Để chứng minh dự án đạt chuẩn "Production-ready", cần có hệ thống đo lường minh bạch.
+1. Giai đoạn 5: Đánh giá Tự động bằng Dữ liệu Tổng hợp (Synthetic Data Evaluation)
+Để chứng minh dự án đạt chuẩn "Production-ready", cần có hệ thống đo lường minh bạch bằng tập test tự sinh.
 
-Sử dụng framework ragas hoặc deepeval kết hợp LLM để tự động quét qua bộ luật và sinh ra hàng trăm cặp "câu hỏi khó - đáp án chuẩn" (Synthetic Data).
+Sử dụng script Python kết hợp LLM để tự động quét qua bộ luật và sinh ra hàng chục cặp "câu hỏi khó - đáp án chuẩn" (Synthetic Data).
 
-Chạy hệ thống RAG qua bộ dữ liệu này để lấy các chỉ số đo lường: Context Precision (Độ chính xác ngữ cảnh) và Faithfulness (Độ trung thực). Ghi chép các chỉ số này vào CV.
+Chạy hệ thống RAG qua bộ dữ liệu này và đánh giá tự động dựa trên 6 metric. Quan trọng nhất là: Context Recall (Độ đầy đủ của thuật toán tìm kiếm), Hallucination Rate (Tỉ lệ trích dẫn sai luật), và Faithfulness (Độ trung thực).
