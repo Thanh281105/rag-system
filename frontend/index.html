@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Hệ thống trả lời câu hỏi pháp lý thông minh sử dụng AI đa tác nhân">
-    <title>⚖️ Legal RAG - Trợ lý Pháp lý AI</title>
+    <meta name="description" content="Hệ thống trả lời câu hỏi AI/ML cross-lingual từ ArXiv papers">
+    <title>🧠 ArXiv RAG - Trợ lý Nghiên cứu AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -19,10 +19,10 @@
         <!-- Header -->
         <header class="app-header">
             <div class="logo">
-                <span class="logo-icon">⚖️</span>
+                <span class="logo-icon">🧠</span>
                 <div>
-                    <h1>Legal RAG</h1>
-                    <p class="tagline">Trợ lý Pháp lý AI Đa tác nhân</p>
+                    <h1>ArXiv RAG</h1>
+                    <p class="tagline">Cross-lingual AI Research Assistant</p>
                 </div>
             </div>
             <div class="header-badges">
@@ -31,7 +31,7 @@
                     Online
                 </span>
                 <span class="badge badge-blue">Groq LLaMA-3.3</span>
-                <span class="badge badge-purple">RAPTOR + HyDE</span>
+                <span class="badge badge-purple">RAPTOR + Cross-lingual</span>
             </div>
         </header>
 
@@ -39,19 +39,19 @@
         <main class="chat-container" id="chatContainer">
             <!-- Welcome Message -->
             <div class="welcome-card" id="welcomeCard">
-                <div class="welcome-icon">🏛️</div>
-                <h2>Chào mừng đến với Legal RAG</h2>
-                <p>Hệ thống trả lời câu hỏi pháp lý thông minh, sử dụng kiến trúc Multi-Agent với RAPTOR Tree Indexing và HyDE Query Transformation.</p>
+                <div class="welcome-icon">🧠</div>
+                <h2>Chào mừng đến với ArXiv RAG</h2>
+                <p>Hệ thống trả lời câu hỏi AI/ML thông minh, sử dụng kiến trúc 3-Agent Cross-lingual với RAPTOR Tree Indexing. Hỏi bằng tiếng Việt, nhận câu trả lời chính xác từ papers ArXiv.</p>
                 <div class="feature-grid">
                     <div class="feature-card">
-                        <span class="feature-icon">🤖</span>
-                        <h3>4 AI Agents</h3>
-                        <p>Router → RAG → Analyst → Compliance</p>
+                        <span class="feature-icon">🌐</span>
+                        <h3>Cross-lingual</h3>
+                        <p>VN Query → EN Retrieval → VN Answer</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">🌳</span>
                         <h3>RAPTOR Tree</h3>
-                        <p>Cây tri thức phân cấp</p>
+                        <p>Hierarchical Paper Indexing</p>
                     </div>
                     <div class="feature-card">
                         <span class="feature-icon">🔍</span>
@@ -61,14 +61,14 @@
                     <div class="feature-card">
                         <span class="feature-icon">⚡</span>
                         <h3>Rust Backend</h3>
-                        <p>Actix-Web hiệu năng cao</p>
+                        <p>3-Agent Pipeline</p>
                     </div>
                 </div>
                 <div class="example-questions">
                     <p class="example-label">💡 Câu hỏi mẫu:</p>
-                    <button class="example-btn" onclick="askExample(this)">Điều kiện thành lập công ty cổ phần là gì?</button>
-                    <button class="example-btn" onclick="askExample(this)">Quyền và nghĩa vụ của cổ đông phổ thông?</button>
-                    <button class="example-btn" onclick="askExample(this)">Thủ tục giải thể doanh nghiệp theo Luật Doanh nghiệp?</button>
+                    <button class="example-btn" onclick="askExample(this)">RAPTOR là gì và hoạt động như thế nào?</button>
+                    <button class="example-btn" onclick="askExample(this)">So sánh LoRA và QLoRA trong fine-tuning LLM</button>
+                    <button class="example-btn" onclick="askExample(this)">Attention mechanism giải quyết vấn đề gì trong Transformer?</button>
                 </div>
             </div>
 
@@ -82,7 +82,7 @@
                 <div class="input-wrapper">
                     <textarea
                         id="queryInput"
-                        placeholder="Nhập câu hỏi pháp lý của bạn..."
+                        placeholder="Nhập câu hỏi về AI/ML bằng tiếng Việt..."
                         rows="1"
                         autofocus
                     ></textarea>
@@ -93,7 +93,7 @@
                     </button>
                 </div>
                 <p class="input-hint">
-                    Powered by <strong>Groq LLaMA-3.3-70b</strong> · Rust Backend · RAPTOR + HyDE
+                    Powered by <strong>Groq LLaMA-3.3-70b</strong> · Rust Backend · Cross-lingual RAPTOR
                 </p>
             </form>
         </footer>

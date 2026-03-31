@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::config::AppConfig;
-use crate::models::document::LegalDocument;
+use crate::models::document::ArxivDocument;
 
 #[derive(Clone)]
 pub struct QdrantService {
@@ -32,7 +32,7 @@ impl QdrantService {
         &self,
         query_vector: Vec<f32>,
         top_k: u64,
-    ) -> Result<Vec<LegalDocument>> {
+    ) -> Result<Vec<ArxivDocument>> {
         let results = self
             .client
             .query(
@@ -46,18 +46,21 @@ impl QdrantService {
             )
             .await?;
 
-        let documents: Vec<LegalDocument> = results
+        let documents: Vec<ArxivDocument> = results
             .result
             .into_iter()
             .map(|point| {
                 let payload = point.payload;
-                LegalDocument {
+                ArxivDocument {
                     text: extract_string(&payload, "text"),
                     node_id: extract_integer(&payload, "node_id"),
                     level: extract_integer(&payload, "level") as i32,
                     doc_title: extract_string(&payload, "doc_title"),
                     doc_id: extract_integer(&payload, "doc_id"),
                     score: point.score as f64,
+                    year: extract_integer(&payload, "year") as i32,
+                    authors: extract_string(&payload, "authors"),
+                    arxiv_id: extract_string(&payload, "arxiv_id"),
                 }
             })
             .collect();
@@ -66,34 +69,28 @@ impl QdrantService {
         Ok(documents)
     }
 
-    /// Vietnamese stop-words - các từ phổ biến không mang ý nghĩa pháp lý
-    /// Loại bỏ để sparse vector tập trung vào keywords quan trọng
-    const VIETNAMESE_STOP_WORDS: &'static [&'static str] = &[
-        // Giới từ / Liên từ
-        "của", "và", "các", "có", "được", "trong", "là", "cho", "với", "về",
-        "theo", "từ", "đến", "tại", "bởi", "do", "khi", "nếu", "thì", "mà",
-        "hoặc", "hay", "cũng", "đã", "sẽ", "đang", "để", "bị", "không",
-        // Đại từ
-        "này", "đó", "những", "một", "các", "mỗi", "mọi", "tất", "cả",
-        // Trợ từ / Phụ từ
-        "rằng", "thì", "lại", "vẫn", "còn", "nên", "phải", "cần",
-        "như", "trên", "dưới", "trước", "sau", "giữa", "ngoài",
-        // Từ nối phổ biến trong văn bản luật (nhưng không mang thông tin pháp lý)
-        "quy", "định", "việc", "người", "nhưng", "vào", "ra",
+    /// English stop-words for BM25-like sparse vectors
+    const ENGLISH_STOP_WORDS: &'static [&'static str] = &[
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+        "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+        "being", "have", "has", "had", "do", "does", "did", "will", "would",
+        "could", "should", "may", "might", "shall", "can", "need", "must",
+        "it", "its", "this", "that", "these", "those", "he", "she", "they",
+        "we", "you", "not", "no", "nor", "as", "if", "then", "than", "so",
+        "which", "who", "whom", "what", "where", "when", "how", "all",
+        "each", "every", "both", "few", "more", "most", "other", "some",
+        "any", "only", "very", "also", "just", "about", "up", "out", "off",
     ];
 
-    /// Helper tạo vector thưa (sparse vector) tương thích 100% với Python (MD5 modulo 100k).
-    /// Cải tiến: loại bỏ stop-words tiếng Việt + log-scaled TF (gần BM25 hơn).
+    /// Sparse vector generation (MD5 modulo 100k, compatible with Python)
     fn text_to_sparse(text: &str) -> (Vec<u32>, Vec<f32>) {
         let mut word_freq: HashMap<u32, f32> = HashMap::new();
         let words = text.to_lowercase();
 
-        // Xây dựng HashSet stop-words để tra cứu O(1)
         let stop_set: std::collections::HashSet<&str> =
-            Self::VIETNAMESE_STOP_WORDS.iter().copied().collect();
+            Self::ENGLISH_STOP_WORDS.iter().copied().collect();
 
         for w in words.split_whitespace() {
-            // Bỏ qua stop-words và từ quá ngắn (1 ký tự)
             if stop_set.contains(w) || w.chars().count() <= 1 {
                 continue;
             }
@@ -113,7 +110,7 @@ impl QdrantService {
         let mut values = Vec::new();
         for (k, raw_tf) in word_freq {
             indices.push(k);
-            // Log-scaled TF: 1 + ln(tf) — giảm ảnh hưởng của từ lặp quá nhiều
+            // Log-scaled TF: 1 + ln(tf)
             values.push(1.0 + raw_tf.ln());
         }
 
@@ -125,7 +122,7 @@ impl QdrantService {
         &self,
         query_text: &str,
         top_k: u64,
-    ) -> Result<Vec<LegalDocument>> {
+    ) -> Result<Vec<ArxivDocument>> {
         let (indices, values) = Self::text_to_sparse(query_text);
 
         let results = self
@@ -141,18 +138,21 @@ impl QdrantService {
             )
             .await?;
 
-        let documents: Vec<LegalDocument> = results
+        let documents: Vec<ArxivDocument> = results
             .result
             .into_iter()
             .map(|point| {
                 let payload = point.payload;
-                LegalDocument {
+                ArxivDocument {
                     text: extract_string(&payload, "text"),
                     node_id: extract_integer(&payload, "node_id"),
                     level: extract_integer(&payload, "level") as i32,
                     doc_title: extract_string(&payload, "doc_title"),
                     doc_id: extract_integer(&payload, "doc_id"),
                     score: point.score as f64,
+                    year: extract_integer(&payload, "year") as i32,
+                    authors: extract_string(&payload, "authors"),
+                    arxiv_id: extract_string(&payload, "arxiv_id"),
                 }
             })
             .collect();

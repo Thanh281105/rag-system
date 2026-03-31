@@ -1,7 +1,6 @@
-//! Agentic RAG Legal System - Rust Backend
+//! Agentic RAG ArXiv System - Rust Backend
 //! 
-//! Multi-agent orchestration server với Actix-Web.
-//! Agents: Router → RAG (HyDE + Search) → Analyst → Compliance
+//! Cross-lingual 3-Agent orchestration: RAG-Router → Analyst → Reviewer
 
 mod config;
 mod errors;
@@ -34,7 +33,7 @@ async fn main() -> std::io::Result<()> {
     let config = AppConfig::from_env().expect("Failed to load configuration");
     let bind_addr = format!("{}:{}", config.host, config.port);
     
-    info!("🏛️ Legal RAG Backend starting...");
+    info!("🧠 ArXiv RAG Backend starting...");
     info!("📍 Binding to: {}", bind_addr);
 
     // ─── Services ────────────────────────────────────────
@@ -50,7 +49,6 @@ async fn main() -> std::io::Result<()> {
     info!("🚀 Server ready at http://{}", bind_addr);
 
     HttpServer::new(move || {
-        // CORS cho frontend
         let cors = Cors::default()
             .allow_any_origin()
             .allow_any_method()
@@ -58,17 +56,13 @@ async fn main() -> std::io::Result<()> {
             .max_age(3600);
 
         App::new()
-            // Middleware
             .wrap(cors)
             .wrap(middleware::Logger::default())
             .wrap(tracing_actix_web::TracingLogger::default())
-            // Shared state
             .app_data(web::Data::new(groq_service.clone()))
             .app_data(web::Data::new(qdrant_service.clone()))
-            // Routes
             .service(routes::health::health_check)
             .service(routes::query::handle_query)
-            // Static files (frontend)
             .service(fs::Files::new("/", "../frontend").index_file("index.html"))
     })
     .bind(&bind_addr)?

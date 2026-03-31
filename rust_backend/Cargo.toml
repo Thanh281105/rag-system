@@ -1,8 +1,8 @@
 [package]
-name = "legal-rag-backend"
+name = "arxiv-rag-backend"
 version = "0.1.0"
 edition = "2021"
-description = "Agentic RAG Legal System - Rust Backend with Multi-Agent Orchestration"
+description = "Cross-lingual ArXiv RAG System - Rust Backend with 3-Agent Orchestration"
 
 [dependencies]
 # Web Framework

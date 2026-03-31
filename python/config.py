@@ -1,5 +1,5 @@
 """
-Cấu hình chung cho toàn bộ hệ thống RAG pháp lý.
+Cấu hình chung cho toàn bộ hệ thống Cross-lingual ArXiv RAG.
 Đọc biến môi trường từ file .env
 """
 import os
@@ -42,26 +42,26 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
+# ─── ArXiv Configuration ────────────────────────────────
+ARXIV_TOPIC = os.getenv("ARXIV_TOPIC", "cs.AI")
+ARXIV_MAX_PAPERS = int(os.getenv("ARXIV_MAX_PAPERS", "30"))
+
 # ─── RAPTOR Configuration ───────────────────────────────
 RAPTOR_MAX_LEVELS = int(os.getenv("RAPTOR_MAX_LEVELS", "3"))
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "512"))
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "100"))
 
 # ─── Qdrant Configuration ───────────────────────────────
-QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "legal_raptor")
+QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "arxiv_raptor")
 EMBEDDING_DIM = 1024  # bge-m3 output dimension
 
 # ─── Groq Configuration ─────────────────────────────────
 GROQ_MAX_TOKENS = 4096
-GROQ_TEMPERATURE = 0.1  # Low temperature cho câu trả lời pháp lý chính xác
+GROQ_TEMPERATURE = 0.1  # Low temperature cho câu trả lời chính xác
 
 # ─── Retrieval Configuration ────────────────────────────
 TOP_K_RETRIEVAL = 20   # Số lượng kết quả hybrid search
 TOP_K_RERANK = 5       # Số lượng kết quả sau reranking
 
 # ─── RRF (Reciprocal Rank Fusion) Configuration ─────────
-# Trọng số cho Hybrid Search: dense (ngữ nghĩa) vs sparse (keyword/BM25)
-# Domain pháp lý VN có mật độ keyword cao → nên tăng sparse weight
-RRF_DENSE_WEIGHT = float(os.getenv("RRF_DENSE_WEIGHT", "0.5"))
-RRF_SPARSE_WEIGHT = float(os.getenv("RRF_SPARSE_WEIGHT", "0.5"))
-RRF_K = int(os.getenv("RRF_K", "60"))  # Hằng số RRF (cao hơn → ít phân biệt rank)
+RRF_DENSE_WEIGHT = float(os.getenv("RRF_DENSE_WEIGHT", "0.6"))
+RRF_SPARSE_WEIGHT = float(os.getenv("RRF_SPARSE_WEIGHT", "0.4"))
+RRF_K = int(os.getenv("RRF_K", "60"))

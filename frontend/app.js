@@ -1,5 +1,5 @@
 /**
- * Legal RAG Frontend - App Logic
+ * ArXiv RAG Frontend - App Logic
  * Handles chat interactions with the Rust backend
  */
 
@@ -147,11 +147,13 @@ function addBotMessage(answer, sources, trace, timeMs) {
     if (sources && sources.length > 0) {
         sourcesHtml = `
             <div class="sources-section">
-                <div class="sources-title">📚 Nguồn tham khảo (${sources.length})</div>
+                <div class="sources-title">📚 ArXiv Sources (${sources.length})</div>
                 ${sources.map(s => `
                     <div class="source-item">
-                        <span class="source-title">${escapeHtml(s.doc_title || 'Tài liệu')}</span>
-                        <br>${escapeHtml(s.text.substring(0, 150))}...
+                        <span class="source-title">${escapeHtml(s.doc_title || 'Paper')}</span>
+                        <span class="source-meta">${escapeHtml(s.authors || '')} (${s.year || ''})</span>
+                        ${s.arxiv_id ? `<a href="https://arxiv.org/abs/${s.arxiv_id}" target="_blank" class="arxiv-link">arXiv:${s.arxiv_id}</a>` : ''}
+                        <br><span class="source-preview">${escapeHtml(s.text.substring(0, 150))}...</span>
                     </div>
                 `).join('')}
             </div>`;
@@ -171,7 +173,7 @@ function addBotMessage(answer, sources, trace, timeMs) {
     let timeHtml = timeMs > 0 ? `<div class="processing-time">⚡ ${timeMs}ms</div>` : '';
 
     div.innerHTML = `
-        <div class="bot-avatar">⚖️</div>
+        <div class="bot-avatar">🧠</div>
         <div class="message-content">
             ${formatAnswer(answer)}
             ${sourcesHtml}
@@ -191,7 +193,7 @@ function showTyping() {
     div.id = id;
     div.className = 'message message-bot';
     div.innerHTML = `
-        <div class="bot-avatar">⚖️</div>
+        <div class="bot-avatar">🧠</div>
         <div class="message-content">
             <div class="typing-indicator">
                 <div class="typing-dot"></div>
@@ -219,32 +221,36 @@ function showTrace(dataId) {
     const modal = document.getElementById('traceModal');
     const content = document.getElementById('traceContent');
 
-    const complianceClass = trace.compliance_check?.is_compliant ? 'compliance-pass' : 'compliance-fail';
-    const complianceText = trace.compliance_check?.is_compliant ? '✅ PASSED' : '❌ FAILED';
+    const reviewerClass = trace.reviewer_result?.is_approved ? 'compliance-pass' : 'compliance-fail';
+    const reviewerText = trace.reviewer_result?.is_approved ? '✅ APPROVED' : '❌ REJECTED';
 
     content.innerHTML = `
         <div class="trace-step">
-            <h3>1. 🔀 Router Agent</h3>
+            <h3>1. 🔀 Agent 1: RAG-Router</h3>
             <p>Decision: <strong>${trace.router_decision}</strong></p>
         </div>
         <div class="trace-step">
-            <h3>2. 📝 Multi-Query Expansion</h3>
-            <pre>${escapeHtml(trace.hyde_document || 'N/A')}</pre>
+            <h3>2. 🌐 Translation (VN → EN)</h3>
+            <pre>${escapeHtml(trace.translated_query || 'N/A')}</pre>
         </div>
         <div class="trace-step">
-            <h3>3. 🔍 RAG Retrieval</h3>
+            <h3>3. 📝 Multi-Query Expansion (EN)</h3>
+            <pre>${escapeHtml(trace.expanded_queries || 'N/A')}</pre>
+        </div>
+        <div class="trace-step">
+            <h3>4. 🔍 Retrieval</h3>
             <p>Retrieved: ${trace.retrieved_count} docs → Reranked: ${trace.reranked_count} docs</p>
         </div>
         <div class="trace-step">
-            <h3>4. 📊 Analyst Reasoning</h3>
-            <pre>${escapeHtml(trace.analyst_reasoning || 'N/A')}</pre>
+            <h3>5. 🧠 Agent 2: Analyst + Self-check</h3>
+            <pre>${escapeHtml((trace.analyst_answer || 'N/A').substring(0, 500))}</pre>
         </div>
         <div class="trace-step">
-            <h3>5. ✅ Compliance Check</h3>
-            <p class="${complianceClass}">${complianceText}</p>
-            ${trace.compliance_check?.issues?.length > 0
-            ? `<p>Issues: ${trace.compliance_check.issues.join(', ')}</p>` : ''}
-            <p>Retry count: ${trace.compliance_check?.retry_count || 0}</p>
+            <h3>6. ⚖️ Agent 3: Reviewer ${trace.reviewer_triggered ? '(TRIGGERED)' : '(SKIPPED)'}</h3>
+            <p class="${reviewerClass}">${trace.reviewer_triggered ? reviewerText : '⚡ Skipped (not needed)'}</p>
+            ${trace.reviewer_result?.issues?.length > 0
+            ? `<p>Issues: ${trace.reviewer_result.issues.join(', ')}</p>` : ''}
+            ${trace.reviewer_triggered ? `<p>Retry count: ${trace.reviewer_result?.retry_count || 0}</p>` : ''}
         </div>`;
 
     modal.classList.add('active');

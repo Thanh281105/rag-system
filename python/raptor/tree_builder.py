@@ -1,5 +1,6 @@
 """
 Xây dựng cây RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval).
+Xây dựng hierarchical index từ ArXiv papers.
 Đệ quy: chunks gốc → embed → cluster → summarize → embed summaries → cluster → ... → root
 """
 import json
@@ -87,6 +88,9 @@ class RAPTORTree:
                     "doc_id": chunk.get("doc_id", 0),
                     "chunk_id": chunk.get("chunk_id", i),
                     "doc_title": chunk.get("doc_title", ""),
+                    "authors": chunk.get("metadata", {}).get("authors", ""),
+                    "year": chunk.get("metadata", {}).get("year", ""),
+                    "arxiv_id": chunk.get("metadata", {}).get("arxiv_id", ""),
                 }
             )
             self.nodes[node.node_id] = node

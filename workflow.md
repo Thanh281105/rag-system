@@ -1,59 +1,359 @@
-Workflow Dự Án: Hệ thống Agentic RAG Pháp lý Đa tác nhân (Tích hợp HyDE & RAPTOR) với Backend Rust
+# 🚀 Workflow — Enterprise R&D Copilot (Cross-lingual RAG + RAPTOR)
 
-1. Tổng quan Kiến trúc (Architecture Overview)
-Hệ thống là sự kết hợp giữa kiến trúc truy xuất nâng cao (Advanced RAG) và luồng suy luận Đa tác nhân (Multi-Agent), sử dụng sức mạnh của Groq API (miễn phí, tốc độ cao) và được tối ưu hóa toàn diện bằng backend viết bằng ngôn ngữ Rust để đạt độ trễ thấp nhất.
+## 🎯 Goal
 
-2. Giai đoạn 1: Chuẩn bị Dữ liệu & Lập chỉ mục Phân cấp (RAPTOR)
-Giai đoạn này giúp hệ thống hiểu được cả bức tranh toàn cảnh lẫn chi tiết của các bộ luật dài.
+Hệ thống trả lời câu hỏi Tiếng Việt dựa trên tài liệu kỹ thuật Tiếng Anh (PDF), đảm bảo:
 
-Nguồn Dữ liệu: Sử dụng bộ dữ liệu undertheseanlp/UTS_VLC chứa các văn bản luật và nghị định Việt Nam.
+- Factual correctness (không hallucination)
+- Low latency
+- Scalable production deployment
 
-Xử lý văn bản tốc độ cao: Dùng thư viện PyO3 kết hợp Rust vào Python để tăng tốc quá trình làm sạch (cleaning) và phân mảnh (chunking) tài liệu.
+---
 
-Xây dựng cây RAPTOR:
+# 🧩 OVERALL FLOW
 
-Chia nhỏ văn bản luật thành các đoạn (chunks) cơ sở.
+User Query (Vietnamese)
+        ↓
+[Agent 1: RAG-Router]
+        ↓
+Translate → Multi-query Expansion (EN)
+        ↓
+Embedding + Hybrid Search (Qdrant)
+        ↓
+Reranking (Python microservice)
+        ↓
+Top-K Context (Leaf + Parent nodes)
+        ↓
+[Agent 2: Analyst + Self-check]
+        ↓
+(Conditional)
+[Agent 3: Reviewer]
+        ↓
+Final Answer (Vietnamese + citations)
 
-Nhúng (Embed) các đoạn này bằng mô hình mã nguồn mở BAAI/bge-m3.
+---
 
-Dùng thuật toán UMAP và GMM để phân cụm (clustering) các điều khoản có ý nghĩa liên quan.
+# 🔄 STAGE 1 — INDEXING PIPELINE (OFFLINE)
 
-Gọi Groq API (LLaMA-3) tóm tắt từng cụm, tiếp tục lặp lại đệ quy để tạo thành một cây tri thức từ dưới lên trên.
+## 1.1 Data Ingestion
 
-Lưu trữ: Đưa toàn bộ các nút (nodes) của cây RAPTOR vào Qdrant (Vector Database viết bằng Rust).
+- Source: ArXiv API
+- Input:
+  - PDF
+  - Metadata (title, authors, year, abstract)
 
-1. Giai đoạn 2: Biến đổi Truy vấn với Multi-Query Expansion (Query Transformation)
-Đây là tuyến phòng thủ đầu tiên khi nhận câu hỏi từ người dùng nhằm mở rộng ngữ cảnh, thay thế hoàn toàn cho thuật toán HyDE để tránh bị "ngộ độc vector" do LLM ảo giác ra số hiệu luật.
+---
 
-Mở rộng Đa truy vấn (Multi-Query): Hệ thống dùng LLM (Groq) để phân tích câu hỏi gốc và sinh ra 3 biến thể câu hỏi khác nhau nhằm tăng cơ hội vét cạn (recall) tài liệu.
+## 1.2 PDF Processing
 
-Mã hóa (Embedding): Chuyển đổi tất cả các biến thể truy vấn này thành vector để chuẩn bị tìm kiếm.
+- Extract raw text from PDF
+- Clean:
+  - remove noise (headers, footers, page numbers)
+  - remove LaTeX artifacts
+  - normalize encoding (UTF-8)
 
-1. Giai đoạn 3: Truy xuất Lai & Xếp hạng lại (Hybrid Search & Reranking)
-Hybrid Search: Tìm kiếm trên Qdrant kết hợp tìm ngữ nghĩa (Dense Vector) và tìm từ khóa chính xác (BM25 - Sparse Vector có áp dụng Log-scaled TF và loại bỏ Stop-words tiếng Việt). Hợp nhất kết quả bằng thuật toán RRF.
+---
 
-Reranking: Gọi hệ thống Microservice Python bằng HTTP để chạy mô hình Cross-encoder cục bộ (bge-reranker-v2-m3). Tốc độ siêu tốc thông qua batch-processing, chấm điểm chéo từng tài liệu để lấy lại chính xác top 5 đoạn ngữ cảnh giá trị nhất.
+## 1.3 Semantic Chunking (Leaf Nodes)
 
-1. Giai đoạn 4: Điều phối Đa tác nhân (Agentic Workflow) bằng Rust
-Thay vì dùng Python FastAPI thông thường, backend được kiến trúc hoàn toàn bằng Rust để thể hiện năng lực kỹ sư hệ thống.
+- Split theo semantic boundaries (NOT fixed size)
+- Preserve:
+  - algorithm description
+  - tables
+  - formulas
 
-Backend Framework: Sử dụng Actix-Web để xử lý API đồng thời với hiệu năng cực cao và an toàn bộ nhớ.
+---
 
-AI SDK: Sử dụng framework rig-rs (Rust) để thiết lập luồng giao tiếp với Groq API và Qdrant.
+## 1.4 Context Injection
 
-Luồng Đa tác nhân:
+Format mỗi chunk:
 
-Router Agent: Nhận câu hỏi, đánh giá ý định để quyết định xem có cần tra cứu luật hay chỉ là giao tiếp thông thường.
+```
+[Paper Title (Year)] Section Name:
+<chunk content>
+```
 
-RAG Agent: Thực thi toàn bộ Giai đoạn 2 và 3 (Multi-Query Expansion + Hybrid Search + Reranking) để lấy bằng chứng pháp lý.
+Ví dụ:
 
-Analyst Agent: Đọc bằng chứng từ RAG Agent và sinh ra câu trả lời lập luận từng bước.
+```
+[Attention Is All You Need (2017)] Multi-Head Attention:
+Multi-head attention allows the model to jointly attend to information
+from different representation subspaces at different positions...
+```
 
-Consistency/Compliance Agent: Đóng vai trò "Thẩm phán". Tác nhân này đối chiếu chéo câu trả lời của Analyst Agent với các đoạn luật gốc để bắt lỗi logic hoặc ảo giác (hallucination). Nếu phát hiện lỗi, nó yêu cầu sinh lại câu trả lời.
+---
 
-1. Giai đoạn 5: Đánh giá Tự động bằng Dữ liệu Tổng hợp (Synthetic Data Evaluation)
-Để chứng minh dự án đạt chuẩn "Production-ready", cần có hệ thống đo lường minh bạch bằng tập test tự sinh.
+## 1.5 Embedding
 
-Sử dụng script Python kết hợp LLM để tự động quét qua bộ luật và sinh ra hàng chục cặp "câu hỏi khó - đáp án chuẩn" (Synthetic Data).
+- Model: bge-m3
+- Output:
+  - dense vector
+  - metadata
 
-Chạy hệ thống RAG qua bộ dữ liệu này và đánh giá tự động dựa trên 6 metric. Quan trọng nhất là: Context Recall (Độ đầy đủ của thuật toán tìm kiếm), Hallucination Rate (Tỉ lệ trích dẫn sai luật), và Faithfulness (Độ trung thực).
+---
+
+## 1.6 Clustering (RAPTOR)
+
+- Reduce dimension: UMAP
+- Clustering: GMM
+
+---
+
+## 1.7 Parent Node Generation
+
+- Input: cluster of leaf nodes
+- LLM summarize → parent node (EN)
+
+---
+
+## 1.8 Storage (Qdrant)
+
+Store BOTH:
+
+### Leaf nodes
+
+- raw chunk
+- embedding
+- metadata
+
+### Parent nodes
+
+- summary
+- embedding
+- reference to children
+
+---
+
+# 🔍 STAGE 2 — QUERY PROCESSING (ONLINE)
+
+## 2.1 Input
+
+- User query (Vietnamese)
+
+---
+
+## 2.2 Translate-first Strategy
+
+- LLM translate → English
+- Generate 3 variants:
+  - semantic rephrase
+  - keyword-focused
+  - technical phrasing
+
+---
+
+## 2.3 Terminology Injection (Optional but recommended)
+
+- Preserve keywords:
+  - RAG
+  - Transformer
+  - LoRA
+  - RLHF
+
+---
+
+# 🔎 STAGE 3 — RETRIEVAL
+
+## 3.1 Embedding
+
+- Embed 3 English queries
+
+---
+
+## 3.2 Hybrid Search
+
+- Dense search (vector similarity)
+- Sparse search (BM25)
+
+Run in parallel
+
+---
+
+## 3.3 Merge Results
+
+- Combine dense + sparse results
+- Deduplicate
+
+---
+
+## 3.4 Reranking (Python microservice)
+
+- Model: bge-reranker-v2-m3
+- Input:
+  - EN query
+  - candidate chunks
+- Output:
+  - relevance score
+
+---
+
+## 3.5 Context Selection
+
+- Select Top-K (e.g., 5–8)
+- Mix:
+  - Leaf nodes (detail)
+  - Parent nodes (summary)
+
+---
+
+# 🧠 STAGE 4 — GENERATION
+
+## 4.1 Agent 2: Analyst + Self-check
+
+### Input
+
+- Top-K context (EN)
+- Original query (VN)
+
+### Output
+
+- Answer (Vietnamese)
+
+---
+
+## 4.2 Constraints (VERY IMPORTANT)
+
+- Only use provided context
+- Keep technical terms in English
+- Must include citation:
+
+```
+Theo [Paper Title] (Author, Year), ...
+```
+
+Ví dụ:
+
+```
+Theo [Attention Is All You Need] (Vaswani et al., 2017),
+cơ chế multi-head attention cho phép model jointly attend
+tới thông tin từ các representation subspace khác nhau.
+```
+
+---
+
+## 4.3 Self-check step
+
+LLM must verify:
+
+- numbers (accuracy, F1, params)
+- terminology correctness
+- consistency with context
+
+---
+
+# ⚖️ STAGE 5 — CONDITIONAL REVIEW
+
+## Trigger conditions
+
+- Query asks:
+  - numbers / metrics
+  - formulas
+  - cost / performance
+- OR low confidence from Analyst
+
+---
+
+## Reviewer Agent
+
+- Compare:
+  - Answer (VN)
+  - Source (EN)
+- Detect:
+  - hallucination
+  - incorrect translation
+  - wrong numbers
+
+---
+
+## Output
+
+- Approve OR regenerate answer
+
+---
+
+# 📊 STAGE 6 — EVALUATION (OFFLINE)
+
+## Tools
+
+- Ragas
+- DeepEval
+
+---
+
+## Metrics
+
+### 1. Context Recall
+
+- Retrieved đúng tài liệu không?
+
+### 2. Faithfulness
+
+- Answer có đúng với source không?
+
+### 3. Hallucination Rate
+
+- Có bịa số liệu không?
+
+---
+
+# ⚡ PERFORMANCE OPTIMIZATION
+
+## 1. Async Processing (Rust)
+
+- Parallel:
+  - translation
+  - retrieval
+  - BM25 + vector search
+
+---
+
+## 2. Caching
+
+- Query → embedding
+- Query → results
+- Rerank results
+
+---
+
+## 3. Conditional Execution
+
+- Reviewer only when needed
+
+---
+
+# 🚨 FAILURE HANDLING
+
+## Case: No relevant context
+
+→ Return:
+
+```
+Xin lỗi, tôi không tìm thấy thông tin liên quan trong cơ sở dữ liệu.
+Vui lòng thử hỏi lại với câu hỏi cụ thể hơn hoặc về chủ đề AI/ML khác.
+```
+
+---
+
+## Case: Low confidence
+
+→ Trigger reviewer OR fallback answer
+
+---
+
+# 🧱 TECH STACK
+
+- Backend: Rust (Actix-Web)
+- Vector DB: Qdrant
+- Embedding: bge-m3
+- Reranker: bge-reranker-v2-m3
+- LLM: Groq
+- Evaluation: Ragas, DeepEval
+
+---
+
+# 🧠 DESIGN PRINCIPLES
+
+- Translate-first > Cross-lingual embedding
+- Raw data > Summary (for correctness)
+- Conditional compute > Always-on agents
+- Retrieval quality > Model size

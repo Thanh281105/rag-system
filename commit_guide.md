@@ -1,15 +1,13 @@
-# Hướng dẫn Commit
+# Hướng dẫn Commit (Phase 2)
 
-Bạn có thể dùng đoạn nội dung sau để commit tất cả các thay đổi vừa rồi. Nó tóm tắt đầy đủ kỹ thuật nhưng vẫn ngắn gọn.
+Bạn có thể dùng lệnh commit ngắn gọn này để lưu trữ tiến độ về chiến lược dữ liệu mới:
 
 ```bash
 git add .
-git commit -m "feat(rag): Upgrade pipeline for VN legal domain
+git commit -m "feat(rag): Implement Advanced Data Funnel & Strict Prompting
 
-- **Chunking**: Implement hierarchy-aware chunking (Phần->...->Khoản->Điểm) with auto parent context injection. Switched to tiktoken for exact overlap.
-- **Reranker**: Replaced LLM scoring with 'bge-reranker-v2-m3' cross-encoder microservice for 5x-10x speedup in Rust backend.
-- **Sparse Vector (BM25)**: Added Vietnamese stop-words removal and log-scaled TF to heavily boost keyword matching.
-- **Data Cleaner**: Added intensive regex patterns to strip OCR watermarks, footnotes, and signature blocks from gov documents.
-- **Evaluation**: Integrated Context Recall, Answer Correctness, and Hallucination Rate metrics.
-- **Config**: Extracted RRF weights into .env for easy A/B tuning."
+- **Data Loader**: Added year extraction, VBHN priority, and version-based deduplication across multiple dataset splits. Output format mapped to JSONL (content, source, version, category).
+- **Format Injection**: Prefixed chunks precisely with `[{source} {version}] Điều X:` to retain explicit context for LLM.
+- **Qdrant & Metadata**: Expanded Rust `LegalDocument` schema and Python Qdrant payloads to embed `version`, `source`, and `category` into vector payloads.
+- **Analyst Prompt**: Set strict boundary conditions forcing explicit citations and automatic resolution of conflicting penal codes based on issue year."
 ```

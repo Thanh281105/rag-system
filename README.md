@@ -1,103 +1,131 @@
-# 🏛️ Hệ thống RAG Pháp lý Đa tác nhân (Luật Việt Nam)
+# 🧠 Cross-lingual ArXiv RAG — Trợ lý Nghiên cứu AI
 
-> Hệ thống Hệ thống truy xuất và trả lời câu hỏi pháp lý thông minh được thiết kế đặc thù cho cấu trúc Luật Việt Nam. Kết hợp kiến trúc **Multi-Agent + RAPTOR** với backend Rust hiệu năng siêu cao.
-
-## ✨ Tính năng nổi bật & Tối ưu hóa
-
-- **🌳 RAPTOR Tree Indexing (Hierarchy-Aware)** — Xây dựng cây tri thức phân cấp sâu tới tận cấp `Khoản/Điểm`, tự động *nhúng ngữ cảnh của Điều cha* vào từng đoạn cắt để LLM không bị mất dấu nguồn gốc văn bản.
-- **📝 Multi-Query Expansion** — Rẽ nhánh đa câu hỏi từ truy vấn gốc (khắc phục điểm yếu "ảo giác" của thuật toán HyDE truyền thống).
-- **🔍 Hybrid Search với Vietnamese BM25** — Kết hợp Dense (semantic) + Sparse search. Vector Sparse được loại bỏ Stop-words Tiếng Việt và áp dụng `Log-scaled TF` để bắt chính xác số hiệu luật (VD: "Nghị định 100", "Điều 345").
-- **⚡ Fast Cross-Encoder Reranking** — Reranking top kết quả bằng mô hình `bge-reranker-v2-m3` qua Python Microservice thay vì dùng LLM-scoring chậm chạp, đem lại tốc độ siêu tốc cho Rust backend.
-- **🤖 Multi-Agent Orchestration** — 4 tác nhân AI phối hợp: Router → RAG → Analyst → Compliance. Agent `Compliance` (Thẩm phán) có khả năng tự bắt lỗi ảo giác và yêu cầu sinh lại đáp án.
-- **🦀 Rust Backend** — Code bởi Actix-Web + rig-rs với cơ chế xử lý song song (tokio) giúp giảm thiểu độ trễ.
-- **📊 Auto Evaluation Chuyên Sâu** — Đánh giá tự động bao gồm các metrics tối quan trọng cho pháp lý: Context Recall, Hallucination Rate, Answer Correctness, Faithfulness.
-
-## 🏗️ Kiến trúc
+Hệ thống trả lời câu hỏi AI/ML bằng tiếng Việt, dựa trên papers ArXiv tiếng Anh.
 
 ```
-User Query
-    ↓
-[Router Agent] → Phân loại ý định (Casual vs Legal)
-    ↓
-[RAG Agent] → Multi-Query Expansion → Hybrid Search (Dense+Sparse) → Cross-Encoder Reranking
-    ↓
-[Analyst Agent] → Sinh câu trả lời lập luận dựa trên bằng chứng
-    ↓
-[Compliance Agent] → Kiểm tra ảo giác (Hallucination) / Trích dẫn sai (Retry nếu hỏng)
-    ↓
-Final Answer
+Vietnamese Query → [Translate] → English Search → [RAPTOR + Hybrid] → Vietnamese Answer
 ```
 
-## 🚀 Cài đặt
+## 🏗️ Architecture
 
-### Yêu cầu
+```
+User Query (VN)
+      ↓
+[Agent 1: RAG-Router]
+├─ Classify intent (Technical/Casual)
+├─ Translate VN → EN
+├─ Multi-Query Expansion (3 EN variants)
+├─ Hybrid Search (Dense + Sparse)
+└─ Reranking (bge-reranker-v2-m3)
+      ↓
+[Agent 2: Analyst + Self-check]
+├─ Generate VN answer from EN context
+├─ Citation: Theo [Paper] (Author, Year)
+└─ Self-verify numbers & terminology
+      ↓
+[Agent 3: Conditional Reviewer]
+├─ Only triggers for: numbers, formulas, comparisons
+├─ Compare VN answer vs EN source
+└─ Approve OR regenerate (max 2 retries)
+      ↓
+Final Answer (Vietnamese + citations)
+```
 
-- Python 3.10+
-- Rust (rustup)
-- Docker Desktop
+## 🧩 Tech Stack
 
-### Bước 1: Clone & Setup
+| Component | Technology |
+|-----------|-----------|
+| **Backend** | Rust (Actix-Web) |
+| **Orchestration** | 3-Agent Pipeline |
+| **Vector DB** | Qdrant (Docker) |
+| **Embedding** | BAAI/bge-m3 (1024D) |
+| **Reranker** | bge-reranker-v2-m3 |
+| **LLM** | Groq API (LLaMA-3.3-70b) |
+| **Data Source** | ArXiv API (cs.AI) |
+| **Indexing** | RAPTOR (UMAP + GMM) |
+| **Evaluation** | Ragas + DeepEval (7 metrics) |
+
+## 🚀 Quick Start
+
+### 1. Prerequisites
 
 ```bash
-git clone <repo-url>
-cd RAG_self_project
-cp .env.example .env
-# Điền GROQ_API_KEY và các setting (RRF_K, RRF_DENSE_WEIGHT...) vào .env
-# Copy frontend `.env.example` -> `frontend/.env` nếu có
-```
-
-### Bước 2: Khởi động Qdrant
-
-```bash
+# Docker for Qdrant
 docker-compose up -d
+
+# Python dependencies
+cd python && pip install -r requirements.txt
 ```
 
-### Bước 3: Cài đặt & Chạy Python Pipeline (Data + Microservices)
+### 2. Environment Setup
 
 ```bash
-cd python
-pip install -r requirements.txt
-
-# Chạy tạo data và vector DB
-python scripts/01_download_data.py
-python scripts/02_build_raptor.py
-python scripts/03_index_qdrant.py
-
-# KHỞI ĐỘNG MICROSERVICE CHO RUST (Rất Quan Trọng)
-python scripts/embedding_server.py
+cp .env.example .env
+# Edit .env: add GROQ_API_KEY
 ```
 
-### Bước 4: Khởi động Rust Backend
+### 3. Data Pipeline (Offline)
 
 ```bash
-# Mở một terminal mới
+# Step 1: Download ArXiv papers
+python python/scripts/01_download_data.py
+
+# Step 2: Build RAPTOR tree
+python python/scripts/02_build_raptor.py
+
+# Step 3: Index to Qdrant
+python python/scripts/03_index_qdrant.py
+```
+
+### 4. Start Backend
+
+```bash
+# Start Python embedding/reranking service
+python python/scripts/embedding_server.py
+
+# Start Rust backend
 cd rust_backend
 cargo run --release
 ```
 
-## 📊 Tech Stack
+### 5. Open UI
 
-| Component | Technology |
-|-----------|-----------|
-| LLM | Groq API (LLaMA-3.3-70b/8b) |
-| Embedding | BAAI/bge-m3 |
-| Reranker | BAAI/bge-reranker-v2-m3 |
-| Vector DB | Qdrant |
-| Backend | Rust (Actix-Web + rig-rs) |
-| Microservice | Python (FastAPI + SentenceTransformers) |
-| Evaluation | Custom LLM-as-a-judge (Context Recall, Hallucination Rate) |
+Visit `http://localhost:8080`
 
-## 📁 Cấu trúc dự án
+## 📊 Evaluation
 
-```
-RAG_self_project/
-├── python/              # Data processing (Cleaner, Chunker), RAPTOR, Evaluation, FastAPI Microservices
-├── rust_backend/        # Multi-Agent Actix-Web server điều phối mọi hoạt động
-├── frontend/            # Web UI
-├── data/                # Raw/Processed/Synthetic data
-└── docker-compose.yml   # Qdrant service
+```bash
+# Generate synthetic Q&A (Vietnamese questions from English papers)
+python python/scripts/04_evaluate.py
 ```
 
-## 📜 License
+**7 Metrics:**
 
-MIT
+| Metric | Target |
+|--------|--------|
+| Faithfulness | ≥ 0.90 |
+| Context Precision | ≥ 0.80 |
+| Context Recall | ≥ 0.85 |
+| Answer Relevancy | ≥ 0.85 |
+| Answer Correctness | ≥ 0.80 |
+| Hallucination Rate | ≤ 0.10 |
+| Translation Faithfulness | ≥ 0.85 |
+
+## 📁 Project Structure
+
+```
+├── python/
+│   ├── data_processing/    # ArXiv loader, cleaner, chunker
+│   ├── raptor/             # UMAP + GMM clustering, summarization
+│   ├── retrieval/          # Qdrant client (hybrid search)
+│   ├── evaluation/         # Synthetic data + 7 metrics
+│   ├── embedding_server.py # FastAPI service (embed + rerank)
+│   └── scripts/            # Pipeline scripts (01-04)
+├── rust_backend/
+│   ├── src/agents/         # rag.rs, analyst.rs, compliance.rs
+│   ├── src/services/       # groq.rs, qdrant.rs, reranker.rs
+│   └── src/routes/         # query.rs (3-agent orchestration)
+├── frontend/               # Chat UI (HTML/CSS/JS)
+├── workflow.md             # Detailed pipeline documentation
+└── docker-compose.yml      # Qdrant service
+```

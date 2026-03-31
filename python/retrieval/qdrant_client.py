@@ -1,8 +1,10 @@
 """
-Qdrant client wrapper cho hệ thống RAG pháp lý.
+Qdrant client wrapper cho hệ thống Cross-lingual ArXiv RAG.
 Quản lý collection, upsert, và search trên Qdrant vector database.
 """
 import uuid
+import hashlib
+import math
 import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -21,10 +23,26 @@ from config import QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, EMBEDDING_DIM
 
 console = Console()
 
+# English stop-words for BM25-like sparse vector
+ENGLISH_STOP_WORDS = {
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "shall", "can", "need", "must",
+    "it", "its", "this", "that", "these", "those", "he", "she", "they",
+    "we", "you", "i", "me", "him", "her", "us", "them", "my", "your",
+    "his", "our", "their", "not", "no", "nor", "as", "if", "then",
+    "than", "so", "such", "which", "who", "whom", "what", "where",
+    "when", "how", "all", "each", "every", "both", "few", "more",
+    "most", "other", "some", "any", "only", "very", "also", "just",
+    "about", "above", "after", "before", "between", "into", "through",
+    "during", "while", "up", "down", "out", "off", "over", "under",
+}
+
 
 class QdrantWrapper:
     """Wrapper cho Qdrant operations."""
-    
+
     def __init__(
         self,
         url: str = QDRANT_URL,
@@ -32,35 +50,30 @@ class QdrantWrapper:
         collection_name: str = QDRANT_COLLECTION,
     ):
         self.collection_name = collection_name
-        
+
         kwargs = {"url": url, "timeout": 60}
         if api_key:
             kwargs["api_key"] = api_key
-        
+
         self.client = QdrantClient(**kwargs)
-        console.print(f"[green]✅ Kết nối Qdrant: {url}[/]")
-    
+        console.print(f"[green]✅ Connected to Qdrant: {url}[/]")
+
     def create_collection(self, recreate: bool = False):
-        """
-        Tạo collection với hỗ trợ Hybrid Search (Dense + Sparse vectors).
-        
-        Args:
-            recreate: Nếu True, xóa collection cũ và tạo mới
-        """
+        """Tạo collection với Hybrid Search (Dense + Sparse vectors)."""
         exists = self.client.collection_exists(self.collection_name)
-        
+
         if exists and not recreate:
             info = self.client.get_collection(self.collection_name)
             console.print(
-                f"[yellow]📦 Collection '{self.collection_name}' đã tồn tại "
+                f"[yellow]📦 Collection '{self.collection_name}' already exists "
                 f"({info.points_count} points)[/]"
             )
             return
-        
+
         if exists and recreate:
             self.client.delete_collection(self.collection_name)
-            console.print(f"[yellow]🗑️ Đã xóa collection cũ[/]")
-        
+            console.print(f"[yellow]🗑️ Deleted old collection[/]")
+
         self.client.create_collection(
             collection_name=self.collection_name,
             vectors_config={
@@ -75,39 +88,31 @@ class QdrantWrapper:
                 ),
             },
         )
-        
+
         console.print(
-            f"[green]✅ Đã tạo collection '{self.collection_name}' "
+            f"[green]✅ Created collection '{self.collection_name}' "
             f"(dense: {EMBEDDING_DIM}D + sparse BM25)[/]"
         )
-    
+
     def upsert_nodes(
         self,
         nodes: list[dict],
         embeddings: np.ndarray,
         batch_size: int = 100,
     ):
-        """
-        Thêm RAPTOR nodes vào Qdrant.
-        
-        Args:
-            nodes: List[dict] với metadata
-            embeddings: Dense embeddings
-            batch_size: Kích thước batch
-        """
+        """Thêm RAPTOR nodes vào Qdrant."""
         total = len(nodes)
-        console.print(f"[cyan]📤 Đang upsert {total} nodes vào Qdrant...[/]")
-        
+        console.print(f"[cyan]📤 Upserting {total} nodes to Qdrant...[/]")
+
         for i in range(0, total, batch_size):
             batch_nodes = nodes[i:i + batch_size]
             batch_embeddings = embeddings[i:i + batch_size]
-            
+
             points = []
             for j, (node, emb) in enumerate(zip(batch_nodes, batch_embeddings)):
-                # Tạo sparse vector đơn giản từ text (BM25-like)
                 text = node.get("text", "")
                 sparse_indices, sparse_values = self._text_to_sparse(text)
-                
+
                 point = PointStruct(
                     id=str(uuid.uuid4()),
                     vector={
@@ -123,68 +128,52 @@ class QdrantWrapper:
                         "level": node.get("level", 0),
                         "doc_title": node.get("doc_title", ""),
                         "doc_id": node.get("doc_id", 0),
+                        "authors": node.get("metadata", {}).get("authors", ""),
+                        "year": node.get("metadata", {}).get("year", 0),
+                        "arxiv_id": node.get("metadata", {}).get("arxiv_id", ""),
                         "metadata": node.get("metadata", {}),
                     },
                 )
                 points.append(point)
-            
+
             self.client.upsert(
                 collection_name=self.collection_name,
                 points=points,
             )
-        
-        console.print(f"[green]✅ Đã upsert {total} nodes thành công[/]")
-    
+
+        console.print(f"[green]✅ Upserted {total} nodes successfully[/]")
+
     def _text_to_sparse(self, text: str) -> tuple[list[int], list[float]]:
         """
-        Tạo sparse vector đơn giản từ text (word frequency based).
-        Sử dụng MD5 hash để đảm bảo tính nhất quán giữa index và search (Python/Rust).
+        Tạo sparse vector từ text (BM25-like).
+        English stop-words removal + log-scaled TF.
+        MD5 hash modulo 100k for dimension mapping (compatible with Rust).
         """
-        import hashlib
         words = text.lower().split()
         word_freq = {}
         for w in words:
-            # MD5 hash -> int -> modulo 100000 cho sparse dimension
+            # Skip stop-words and short words
+            if w in ENGLISH_STOP_WORDS or len(w) <= 1:
+                continue
             h = int(hashlib.md5(w.encode('utf-8')).hexdigest(), 16) % 100000
             word_freq[h] = word_freq.get(h, 0) + 1
-        
+
         indices = list(word_freq.keys())
-        values = [float(v) for v in word_freq.values()]
-        
+        # Log-scaled TF: 1 + ln(tf)
+        values = [1.0 + math.log(v) for v in word_freq.values()]
+
         return indices, values
-    
-    def search_dense(
-        self,
-        query_vector: np.ndarray,
-        top_k: int = 20,
-        level_filter: int = None,
-    ) -> list[dict]:
-        """
-        Tìm kiếm Dense vector (semantic search).
-        
-        Args:
-            query_vector: Vector truy vấn
-            top_k: Số kết quả
-            level_filter: Lọc theo RAPTOR level (None = tất cả)
-            
-        Returns:
-            List[dict] kết quả
-        """
-        query_filter = None
-        if level_filter is not None:
-            query_filter = Filter(
-                must=[FieldCondition(key="level", match=MatchValue(value=level_filter))]
-            )
-        
+
+    def search_dense(self, query_vector: np.ndarray, top_k: int = 20) -> list[dict]:
+        """Tìm kiếm Dense vector (semantic search)."""
         results = self.client.query_points(
             collection_name=self.collection_name,
             query=query_vector.tolist(),
             using="dense",
             limit=top_k,
-            query_filter=query_filter,
             with_payload=True,
         )
-        
+
         return [
             {
                 "id": str(r.id),
@@ -193,27 +182,17 @@ class QdrantWrapper:
                 "level": r.payload.get("level", 0),
                 "doc_title": r.payload.get("doc_title", ""),
                 "node_id": r.payload.get("node_id", 0),
+                "authors": r.payload.get("authors", ""),
+                "year": r.payload.get("year", 0),
+                "arxiv_id": r.payload.get("arxiv_id", ""),
             }
             for r in results.points
         ]
-    
-    def search_sparse(
-        self,
-        query_text: str,
-        top_k: int = 20,
-    ) -> list[dict]:
-        """
-        Tìm kiếm Sparse vector (keyword/BM25-like search).
-        
-        Args:
-            query_text: Câu truy vấn text
-            top_k: Số kết quả
-            
-        Returns:
-            List[dict] kết quả
-        """
+
+    def search_sparse(self, query_text: str, top_k: int = 20) -> list[dict]:
+        """Tìm kiếm Sparse vector (keyword/BM25-like search)."""
         indices, values = self._text_to_sparse(query_text)
-        
+
         results = self.client.query_points(
             collection_name=self.collection_name,
             query=SparseVector(indices=indices, values=values),
@@ -221,7 +200,7 @@ class QdrantWrapper:
             limit=top_k,
             with_payload=True,
         )
-        
+
         return [
             {
                 "id": str(r.id),
@@ -230,10 +209,13 @@ class QdrantWrapper:
                 "level": r.payload.get("level", 0),
                 "doc_title": r.payload.get("doc_title", ""),
                 "node_id": r.payload.get("node_id", 0),
+                "authors": r.payload.get("authors", ""),
+                "year": r.payload.get("year", 0),
+                "arxiv_id": r.payload.get("arxiv_id", ""),
             }
             for r in results.points
         ]
-    
+
     def get_collection_info(self) -> dict:
         """Lấy thông tin collection."""
         try:
@@ -249,7 +231,6 @@ class QdrantWrapper:
 
 
 if __name__ == "__main__":
-    # Test kết nối
     wrapper = QdrantWrapper()
     info = wrapper.get_collection_info()
     console.print(f"[bold]Collection info:[/] {info}")

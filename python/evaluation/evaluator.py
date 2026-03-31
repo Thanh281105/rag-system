@@ -1,12 +1,13 @@
 """
-Evaluator module: Đánh giá hệ thống RAG bằng các metrics chuẩn.
-Metrics đầy đủ cho domain pháp lý:
+Evaluator module: Đánh giá hệ thống Cross-lingual ArXiv RAG.
+Metrics:
 - Context Precision: ngữ cảnh truy xuất có liên quan không
-- Context Recall: ngữ cảnh có đủ để suy ra đáp án chuẩn không
+- Context Recall: ngữ cảnh có đủ để suy ra đáp án không
 - Faithfulness: câu trả lời có trung thực với ngữ cảnh không
 - Answer Relevancy: câu trả lời có phù hợp với câu hỏi không
 - Answer Correctness: câu trả lời có khớp với ground truth không
-- Hallucination Rate: tỷ lệ thông tin bịa đặt (đặc biệt quan trọng cho pháp lý)
+- Hallucination Rate: tỷ lệ thông tin bịa đặt
+- Translation Faithfulness: dịch cross-lingual có chính xác không
 """
 import json
 import time
@@ -43,171 +44,156 @@ def _llm_score(prompt: str) -> float:
             max_tokens=10,
         )
         score_str = response.choices[0].message.content.strip()
-        # Parse số từ response (xử lý trường hợp LLM trả thêm text)
         import re
         match = re.search(r'(\d+\.?\d*)', score_str)
         if match:
             score = float(match.group(1))
-            return min(max(score, 0.0), 1.0)  # Clamp to [0, 1]
+            return min(max(score, 0.0), 1.0)
         return 0.0
     except (ValueError, Exception):
         return 0.0
 
 
 def evaluate_faithfulness(answer: str, contexts: list[str]) -> float:
-    """
-    Đánh giá Faithfulness: câu trả lời có đúng với ngữ cảnh hay không.
-    Score 0-1, 1 = hoàn toàn trung thực.
-    """
+    """Câu trả lời có đúng với ngữ cảnh hay không."""
     context_str = "\n\n".join(contexts)
-    prompt = f"""Đánh giá mức độ trung thực (faithfulness) của câu trả lời so với ngữ cảnh.
+    prompt = f"""Evaluate the faithfulness of the answer compared to the context.
+The answer is in Vietnamese and the context is in English (cross-lingual system).
 
-Ngữ cảnh: {context_str[:3000]}
+Context: {context_str[:3000]}
 
-Câu trả lời: {answer}
+Answer: {answer}
 
-Cho điểm từ 0.0 đến 1.0:
-- 1.0: Mọi thông tin đều có trong ngữ cảnh
-- 0.5: Một phần thông tin đúng, một phần bị hallucinate
-- 0.0: Hoàn toàn bịa đặt
+Score from 0.0 to 1.0:
+- 1.0: All information in the answer is supported by the context
+- 0.5: Some information is correct, some is hallucinated
+- 0.0: Completely fabricated
 
-CHỈ trả lời một số thập phân, ví dụ: 0.85"""
+Reply with ONLY a decimal number (e.g., 0.85):"""
     return _llm_score(prompt)
 
 
-def evaluate_context_precision(
-    question: str,
-    contexts: list[str],
-    ground_truth: str,
-) -> float:
-    """
-    Đánh giá Context Precision: ngữ cảnh truy xuất có liên quan không.
-    Score 0-1, 1 = tất cả context đều liên quan.
-    """
+def evaluate_context_precision(question: str, contexts: list[str], ground_truth: str) -> float:
+    """Ngữ cảnh truy xuất có liên quan không."""
     context_str = "\n\n".join(f"[Context {i+1}]: {c}" for i, c in enumerate(contexts))
-    prompt = f"""Đánh giá precision của ngữ cảnh truy xuất cho câu hỏi.
+    prompt = f"""Evaluate precision of retrieved contexts for the question.
 
-Câu hỏi: {question}
-Đáp án chuẩn: {ground_truth}
+Question: {question}
+Ground truth: {ground_truth}
 
-Ngữ cảnh truy xuất:
+Retrieved contexts:
 {context_str[:3000]}
 
-Cho điểm từ 0.0 đến 1.0:
-- 1.0: Tất cả context đều liên quan đến câu hỏi
-- 0.5: Một nửa context liên quan
-- 0.0: Không context nào liên quan
+Score from 0.0 to 1.0:
+- 1.0: All contexts are relevant
+- 0.5: Half are relevant
+- 0.0: None are relevant
 
-CHỈ trả lời một số thập phân:"""
+Reply with ONLY a decimal number:"""
     return _llm_score(prompt)
 
 
-def evaluate_context_recall(
-    question: str,
-    contexts: list[str],
-    ground_truth: str,
-) -> float:
-    """
-    Đánh giá Context Recall: ngữ cảnh có đủ thông tin để suy ra đáp án chuẩn không.
-    Đây là metric quan trọng nhất cho legal RAG - đo xem retrieval có kéo đúng
-    Điều luật cần thiết hay không.
-    
-    Score 0-1, 1 = toàn bộ đáp án có thể suy ra từ context.
-    """
+def evaluate_context_recall(question: str, contexts: list[str], ground_truth: str) -> float:
+    """Ngữ cảnh có đủ thông tin để suy ra đáp án không."""
     context_str = "\n\n".join(contexts)
-    prompt = f"""Đánh giá mức độ đầy đủ (recall) của ngữ cảnh truy xuất.
+    prompt = f"""Evaluate context recall — can the ground truth be derived from the contexts?
 
-Câu hỏi: {question}
-Đáp án chuẩn: {ground_truth[:1500]}
+Question: {question}
+Ground truth: {ground_truth[:1500]}
 
-Ngữ cảnh truy xuất:
+Retrieved contexts:
 {context_str[:3000]}
 
-Cho điểm từ 0.0 đến 1.0:
-- 1.0: Toàn bộ thông tin trong đáp án chuẩn đều CÓ THỂ suy ra từ ngữ cảnh
-- 0.5: Chỉ một phần đáp án có thể suy ra từ ngữ cảnh
-- 0.0: Ngữ cảnh không chứa thông tin nào liên quan đến đáp án
+Score from 0.0 to 1.0:
+- 1.0: All information in ground truth can be derived from contexts
+- 0.5: Only partial information is available
+- 0.0: No relevant information in contexts
 
-CHỈ trả lời một số thập phân:"""
+Reply with ONLY a decimal number:"""
     return _llm_score(prompt)
 
 
 def evaluate_answer_relevancy(question: str, answer: str) -> float:
-    """
-    Đánh giá Answer Relevancy: câu trả lời có trả lời đúng câu hỏi không.
-    """
-    prompt = f"""Đánh giá mức độ phù hợp của câu trả lời với câu hỏi.
+    """Câu trả lời có phù hợp với câu hỏi không."""
+    prompt = f"""Evaluate how well the answer addresses the question.
+Note: Question is in Vietnamese and answer should also be in Vietnamese.
 
-Câu hỏi: {question}
-Câu trả lời: {answer}
+Question: {question}
+Answer: {answer}
 
-Cho điểm từ 0.0 đến 1.0:
-- 1.0: Trả lời chính xác, đầy đủ
-- 0.5: Trả lời một phần
-- 0.0: Không liên quan
+Score from 0.0 to 1.0:
+- 1.0: Complete and accurate answer
+- 0.5: Partial answer
+- 0.0: Irrelevant
 
-CHỈ trả lời một số thập phân:"""
+Reply with ONLY a decimal number:"""
     return _llm_score(prompt)
 
 
-def evaluate_answer_correctness(
-    question: str,
-    answer: str,
-    ground_truth: str,
-) -> float:
-    """
-    Đánh giá Answer Correctness: câu trả lời có khớp với ground truth không.
-    So sánh nội dung thực tế, không yêu cầu từ vựng giống hệt.
-    """
-    prompt = f"""So sánh câu trả lời với đáp án chuẩn và đánh giá mức độ chính xác.
+def evaluate_answer_correctness(question: str, answer: str, ground_truth: str) -> float:
+    """Câu trả lời có khớp với ground truth không."""
+    prompt = f"""Compare the answer to the ground truth and evaluate correctness.
 
-Câu hỏi: {question}
-Đáp án chuẩn: {ground_truth[:1500]}
-Câu trả lời cần đánh giá: {answer[:1500]}
+Question: {question}
+Ground truth: {ground_truth[:1500]}
+Answer to evaluate: {answer[:1500]}
 
-Cho điểm từ 0.0 đến 1.0:
-- 1.0: Câu trả lời và đáp án chuẩn nêu cùng thông tin, cùng kết luận
-- 0.5: Câu trả lời đúng một phần nhưng thiếu hoặc sai một phần
-- 0.0: Câu trả lời hoàn toàn sai so với đáp án chuẩn
+Score from 0.0 to 1.0:
+- 1.0: Answer and ground truth convey the same information
+- 0.5: Partially correct but missing or wrong in some parts
+- 0.0: Completely wrong compared to ground truth
 
-CHỈ trả lời một số thập phân:"""
+Reply with ONLY a decimal number:"""
     return _llm_score(prompt)
 
 
-def evaluate_hallucination_rate(
-    answer: str,
-    contexts: list[str],
-) -> float:
-    """
-    Đánh giá Hallucination Rate: tỷ lệ thông tin bịa đặt trong câu trả lời.
-    Đặc biệt quan trọng cho pháp lý - kiểm tra:
-    - Trích dẫn sai số Điều/Khoản
-    - Bịa tên luật/nghị định không tồn tại
-    - Thêm thông tin không có trong bằng chứng
-    
-    Score 0-1, 0 = không hallucination (TỐT), 1 = toàn hallucination (XẤU).
-    """
+def evaluate_hallucination_rate(answer: str, contexts: list[str]) -> float:
+    """Tỷ lệ hallucination (0 = tốt, 1 = xấu)."""
     context_str = "\n\n".join(contexts)
-    prompt = f"""Phân tích tỷ lệ hallucination (thông tin bịa đặt) trong câu trả lời pháp lý.
+    prompt = f"""Analyze hallucination rate in the answer for a cross-lingual AI research Q&A system.
+The answer is in Vietnamese, the source contexts are in English.
 
-Bằng chứng (ngữ cảnh gốc):
+Source contexts (English):
 {context_str[:3000]}
 
-Câu trả lời cần kiểm tra:
+Answer to check (Vietnamese):
 {answer[:1500]}
 
-Kiểm tra đặc biệt:
-- Số Điều, Khoản, Điểm có đúng với ngữ cảnh không?
-- Tên luật, nghị định, thông tư có tồn tại trong ngữ cảnh không?
-- Có thông tin nào KHÔNG xuất hiện trong ngữ cảnh không?
+Special checks for technical content:
+- Are accuracy numbers, F1 scores, parameter counts correct?
+- Are model/method names accurate?
+- Are technical claims supported by the source?
 
-Cho điểm TỶ LỆ HALLUCINATION từ 0.0 đến 1.0:
-- 0.0: Không có hallucination nào (TỐT)
-- 0.3: Có một vài chi tiết nhỏ bị bịa
-- 0.5: Khoảng nửa thông tin bị bịa
-- 1.0: Hoàn toàn bịa đặt (XẤU)
+Rate HALLUCINATION proportion from 0.0 to 1.0:
+- 0.0: No hallucination (GOOD)
+- 0.3: Minor details fabricated
+- 0.5: About half is fabricated
+- 1.0: Completely fabricated (BAD)
 
-CHỈ trả lời một số thập phân:"""
+Reply with ONLY a decimal number:"""
+    return _llm_score(prompt)
+
+
+def evaluate_translation_faithfulness(answer_vn: str, contexts_en: list[str]) -> float:
+    """Đánh giá chất lượng dịch cross-lingual: thuật ngữ kỹ thuật có được giữ nguyên không."""
+    context_str = "\n\n".join(contexts_en)
+    prompt = f"""Evaluate translation quality in a cross-lingual Q&A system.
+The source is English technical papers and the answer is in Vietnamese.
+
+Check:
+1. Are technical terms preserved in English? (Transformer, attention, LoRA, etc.)
+2. Is the meaning accurately conveyed?
+3. Are citations and references correctly translated?
+
+Source (English): {context_str[:2000]}
+Answer (Vietnamese): {answer_vn[:1500]}
+
+Score from 0.0 to 1.0:
+- 1.0: Perfect cross-lingual transfer, technical terms preserved
+- 0.5: Some terms incorrectly translated or meaning distorted
+- 0.0: Completely wrong translation
+
+Reply with ONLY a decimal number:"""
     return _llm_score(prompt)
 
 
@@ -216,29 +202,18 @@ def run_evaluation(
     rag_pipeline: callable = None,
     max_samples: int = 50,
 ) -> dict:
-    """
-    Chạy đánh giá toàn diện trên bộ synthetic data.
-    
-    Args:
-        qa_pairs: Bộ dữ liệu Q&A tổng hợp
-        rag_pipeline: Function nhận question → trả về (answer, contexts)
-        max_samples: Số mẫu đánh giá tối đa
-        
-    Returns:
-        Dict chứa các metrics trung bình
-    """
-    # Load synthetic data nếu chưa có
+    """Chạy đánh giá toàn diện trên synthetic data."""
     if qa_pairs is None:
         qa_path = SYNTHETIC_DATA_DIR / "synthetic_qa.json"
         if not qa_path.exists():
-            console.print("[red]❌ Chưa có synthetic data. Chạy synthetic_generator trước.[/]")
+            console.print("[red]❌ No synthetic data. Run synthetic_generator first.[/]")
             return {}
         with open(qa_path, "r", encoding="utf-8") as f:
             qa_pairs = json.load(f)
-    
+
     samples = qa_pairs[:max_samples]
-    console.print(f"[bold cyan]📊 Đánh giá {len(samples)} mẫu (6 metrics)...[/]")
-    
+    console.print(f"[bold cyan]📊 Evaluating {len(samples)} samples (7 metrics)...[/]")
+
     results = {
         "faithfulness": [],
         "context_precision": [],
@@ -246,39 +221,38 @@ def run_evaluation(
         "answer_relevancy": [],
         "answer_correctness": [],
         "hallucination_rate": [],
+        "translation_faithfulness": [],
     }
-    
+
     for qa in track(samples, description="Evaluating..."):
         question = qa["question"]
         ground_truth = qa["answer"]
         context = qa.get("context", "")
-        
-        # Chạy RAG pipeline
+
         if rag_pipeline:
             answer, contexts = rag_pipeline(question)
         else:
-            # Dùng ground truth context nếu không có pipeline
             answer = ground_truth
             contexts = [context]
-        
-        # Đánh giá 6 metrics
+
         faith = evaluate_faithfulness(answer, contexts)
         precision = evaluate_context_precision(question, contexts, ground_truth)
         recall = evaluate_context_recall(question, contexts, ground_truth)
         relevancy = evaluate_answer_relevancy(question, answer)
         correctness = evaluate_answer_correctness(question, answer, ground_truth)
         hallucination = evaluate_hallucination_rate(answer, contexts)
-        
+        translation = evaluate_translation_faithfulness(answer, contexts)
+
         results["faithfulness"].append(faith)
         results["context_precision"].append(precision)
         results["context_recall"].append(recall)
         results["answer_relevancy"].append(relevancy)
         results["answer_correctness"].append(correctness)
         results["hallucination_rate"].append(hallucination)
-        
-        time.sleep(1)  # Rate limiting
-    
-    # Tính trung bình
+        results["translation_faithfulness"].append(translation)
+
+        time.sleep(1)
+
     summary = {}
     for metric, scores in results.items():
         if scores:
@@ -288,16 +262,14 @@ def run_evaluation(
                 "max": max(scores),
                 "count": len(scores),
             }
-    
-    # Hiển thị bảng kết quả
-    table = Table(title="📊 RAG Evaluation Results (Legal Domain)")
+
+    table = Table(title="📊 Cross-lingual ArXiv RAG Evaluation Results")
     table.add_column("Metric", style="cyan")
     table.add_column("Mean", style="green")
     table.add_column("Min", style="yellow")
     table.add_column("Max", style="green")
     table.add_column("Desired", style="dim")
-    
-    # Mục tiêu cho domain pháp lý
+
     desired = {
         "faithfulness": "≥ 0.90",
         "context_precision": "≥ 0.80",
@@ -305,8 +277,9 @@ def run_evaluation(
         "answer_relevancy": "≥ 0.85",
         "answer_correctness": "≥ 0.80",
         "hallucination_rate": "≤ 0.10",
+        "translation_faithfulness": "≥ 0.85",
     }
-    
+
     for metric, stats in summary.items():
         table.add_row(
             metric.replace("_", " ").title(),
@@ -315,15 +288,14 @@ def run_evaluation(
             f"{stats['max']:.4f}",
             desired.get(metric, ""),
         )
-    
+
     console.print(table)
-    
-    # Lưu kết quả
+
     save_path = SYNTHETIC_DATA_DIR / "evaluation_results.json"
     with open(save_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-    console.print(f"[green]💾 Kết quả đã lưu: {save_path}[/]")
-    
+    console.print(f"[green]💾 Results saved: {save_path}[/]")
+
     return summary
 
 
