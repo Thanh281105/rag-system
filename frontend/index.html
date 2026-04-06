@@ -1,113 +1,235 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html class="dark" lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Hệ thống trả lời câu hỏi AI/ML cross-lingual từ ArXiv papers">
-    <title>🧠 ArXiv RAG - Trợ lý Nghiên cứu AI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <meta name="description" content="ArXiv RAG - Hệ thống nghiên cứu AI thông minh"/>
+    <title>ArXiv RAG - AI Research Assistant</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-bright":"#242b43","on-secondary-container":"#d9c8ff","secondary-container":"#5516be",
+              "inverse-primary":"#005bc4","tertiary":"#8ce7ff","outline":"#707588","tertiary-dim":"#40ceed",
+              "on-surface-variant":"#a6aabf","error-container":"#9f0519","surface-tint":"#85adff",
+              "on-surface":"#e1e4fa","background":"#090e1c","secondary":"#ac8aff",
+              "on-primary-fixed-variant":"#002a62","primary-fixed-dim":"#5391ff","on-secondary-fixed":"#40009b",
+              "outline-variant":"#434759","surface-container-low":"#0d1323","surface":"#090e1c",
+              "on-error-container":"#ffa8a3","tertiary-fixed-dim":"#40ceed","on-error":"#490006",
+              "primary-dim":"#699cff","surface-container-highest":"#1e253b","error":"#ff716c",
+              "on-primary-fixed":"#000000","on-primary":"#002c66","inverse-surface":"#faf8ff",
+              "on-primary-container":"#002150","primary-container":"#6e9fff","tertiary-container":"#53ddfc",
+              "surface-variant":"#1e253b","surface-container-lowest":"#000000",
+              "on-tertiary-fixed-variant":"#005564","surface-container-high":"#181f33",
+              "secondary-fixed":"#dac9ff","primary-fixed":"#6e9fff","on-tertiary":"#005464",
+              "on-background":"#e1e4fa","error-dim":"#d7383b","inverse-on-surface":"#505466",
+              "on-tertiary-fixed":"#003640","surface-dim":"#090e1c","tertiary-fixed":"#53ddfc",
+              "secondary-dim":"#8455ef","on-secondary":"#280067","surface-container":"#13192b",
+              "on-secondary-fixed-variant":"#5f28c8","primary":"#85adff","secondary-fixed-dim":"#ceb9ff",
+              "on-tertiary-container":"#004b58"
+            },
+            fontFamily: { headline:["Inter"], body:["Inter"], label:["Inter"] }
+          }
+        }
+      }
+    </script>
+    <style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { background: rgba(19,25,43,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+        .glass { background: rgba(30,37,59,0.4); backdrop-filter: blur(16px); }
+        .intelligence-pulse { position:absolute; top:0; left:0; width:100%; height:2px; background:linear-gradient(90deg,transparent,#8ce7ff,transparent); opacity:0.6; }
+        body { font-family:'Inter',sans-serif; background-color:#090e1c; color:#e1e4fa; }
+        .no-scrollbar::-webkit-scrollbar { display:none; }
+        .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+        .session-item:hover .session-delete { opacity:1; }
+        .session-delete { opacity:0; transition:opacity 0.2s; }
+    </style>
 </head>
-<body>
-    <!-- Animated background -->
-    <div class="bg-gradient"></div>
-    <div class="bg-particles" id="particles"></div>
-    
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="logo">
-                <span class="logo-icon">🧠</span>
-                <div>
-                    <h1>ArXiv RAG</h1>
-                    <p class="tagline">Cross-lingual AI Research Assistant</p>
-                </div>
-            </div>
-            <div class="header-badges">
-                <span class="badge badge-green" id="badge-status">
-                    <span class="status-dot"></span>
-                    Online
-                </span>
-                <span class="badge badge-blue">Groq LLaMA-3.3</span>
-                <span class="badge badge-purple">RAPTOR + Cross-lingual</span>
-            </div>
-        </header>
+<body class="flex h-screen overflow-hidden bg-background">
 
-        <!-- Main Chat Area -->
-        <main class="chat-container" id="chatContainer">
-            <!-- Welcome Message -->
-            <div class="welcome-card" id="welcomeCard">
-                <div class="welcome-icon">🧠</div>
-                <h2>Chào mừng đến với ArXiv RAG</h2>
-                <p>Hệ thống trả lời câu hỏi AI/ML thông minh, sử dụng kiến trúc 3-Agent Cross-lingual với RAPTOR Tree Indexing. Hỏi bằng tiếng Việt, nhận câu trả lời chính xác từ papers ArXiv.</p>
-                <div class="feature-grid">
-                    <div class="feature-card">
-                        <span class="feature-icon">🌐</span>
-                        <h3>Cross-lingual</h3>
-                        <p>VN Query → EN Retrieval → VN Answer</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">🌳</span>
-                        <h3>RAPTOR Tree</h3>
-                        <p>Hierarchical Paper Indexing</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">🔍</span>
-                        <h3>Hybrid Search</h3>
-                        <p>Dense + BM25 + Reranking</p>
-                    </div>
-                    <div class="feature-card">
-                        <span class="feature-icon">⚡</span>
-                        <h3>Rust Backend</h3>
-                        <p>3-Agent Pipeline</p>
-                    </div>
-                </div>
-                <div class="example-questions">
-                    <p class="example-label">💡 Câu hỏi mẫu:</p>
-                    <button class="example-btn" onclick="askExample(this)">RAPTOR là gì và hoạt động như thế nào?</button>
-                    <button class="example-btn" onclick="askExample(this)">So sánh LoRA và QLoRA trong fine-tuning LLM</button>
-                    <button class="example-btn" onclick="askExample(this)">Attention mechanism giải quyết vấn đề gì trong Transformer?</button>
-                </div>
+<!-- ═══ SIDEBAR ═══ -->
+<aside id="sidebar" class="hidden lg:flex flex-col h-screen w-64 border-r border-[#434759]/15 bg-[#0d1323] transition-all duration-300">
+    <div class="p-6">
+        <div class="flex items-center gap-3 mb-8">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#85adff] to-[#ac8aff] flex items-center justify-center shadow-lg">
+                <span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings:'FILL' 1;">science</span>
             </div>
-
-            <!-- Messages will be appended here -->
-            <div id="messagesArea"></div>
-        </main>
-
-        <!-- Input Area -->
-        <footer class="input-container">
-            <form id="queryForm" onsubmit="handleSubmit(event)">
-                <div class="input-wrapper">
-                    <textarea
-                        id="queryInput"
-                        placeholder="Nhập câu hỏi về AI/ML bằng tiếng Việt..."
-                        rows="1"
-                        autofocus
-                    ></textarea>
-                    <button type="submit" id="submitBtn" class="send-btn">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-                        </svg>
-                    </button>
-                </div>
-                <p class="input-hint">
-                    Powered by <strong>Groq LLaMA-3.3-70b</strong> · Rust Backend · Cross-lingual RAPTOR
-                </p>
-            </form>
-        </footer>
+            <div>
+                <h2 class="text-lg font-black text-[#85adff] tracking-tight">ArXiv Assistant</h2>
+                <p class="text-[10px] uppercase tracking-widest text-[#a6aabf]">Local Research Mode</p>
+            </div>
+        </div>
+        <nav class="space-y-1">
+            <button onclick="newResearch()" class="w-full flex items-center gap-3 px-4 py-3 text-[#a6aabf] hover:text-white hover:bg-[#13192b] rounded-xl transition-all text-sm font-medium">
+                <span class="material-symbols-outlined">add_circle</span> New Research
+            </button>
+            <button onclick="toggleHistoryPanel()" id="btnChatHistory" class="w-full flex items-center gap-3 px-4 py-3 text-[#a6aabf] hover:text-white hover:bg-[#13192b] transition-all text-sm font-medium">
+                <span class="material-symbols-outlined">forum</span> Chat History
+            </button>
+        </nav>
+        <!-- Session List -->
+        <div id="sessionList" class="mt-4 space-y-1 overflow-y-auto max-h-[45vh] no-scrollbar">
+            <p class="px-4 text-[11px] font-bold text-on-surface-variant/50 tracking-tighter uppercase mb-2">Recent Sessions</p>
+        </div>
     </div>
+    <div class="mt-auto p-6 space-y-1 border-t border-[#434759]/10">
+        <div class="mb-4 px-4 py-2 rounded-lg bg-[#1e253b]/30 border border-[#434759]/15">
+            <p class="text-[11px] text-[#8ce7ff] font-bold uppercase tracking-wider">Local-First Active</p>
+        </div>
+        <a class="flex items-center gap-3 px-4 py-3 text-[#a6aabf] hover:text-white hover:bg-[#13192b] transition-all text-sm font-medium" href="#">
+            <span class="material-symbols-outlined">settings</span> Settings
+        </a>
+        <a class="flex items-center gap-3 px-4 py-3 text-[#a6aabf] hover:text-white hover:bg-[#13192b] transition-all text-sm font-medium" href="#">
+            <span class="material-symbols-outlined">help</span> Support
+        </a>
+    </div>
+</aside>
 
-    <!-- Agent Trace Modal -->
-    <div class="modal-overlay" id="traceModal" onclick="closeTrace(event)">
-        <div class="modal-content" onclick="event.stopPropagation()">
-            <button class="modal-close" onclick="closeTrace()">✕</button>
-            <h2>🔍 Agent Trace</h2>
-            <div id="traceContent"></div>
+<!-- ═══ MAIN CONTENT ═══ -->
+<main class="flex-1 flex flex-col relative overflow-hidden">
+    <!-- Top Nav -->
+    <header class="fixed top-0 w-full z-50 bg-[#090e1c]/80 backdrop-blur-xl flex justify-between items-center px-6 h-16 shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+        <div class="flex items-center gap-4">
+            <span class="text-xl font-bold bg-gradient-to-r from-[#85adff] to-[#ac8aff] bg-clip-text text-transparent font-['Inter'] tracking-tight">Ethereal AI</span>
+            <div id="topNavStatus" class="hidden md:flex items-center gap-1 bg-surface-container rounded-full px-3 py-1.5 ml-2">
+                <span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+                <span class="text-[10px] font-bold text-tertiary tracking-wide uppercase">System Online</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button class="p-2 text-[#a6aabf] hover:bg-[#1e253b]/50 transition-colors rounded-lg active:scale-95 duration-200">
+                <span class="material-symbols-outlined">history</span>
+            </button>
+            <button class="p-2 text-[#a6aabf] hover:bg-[#1e253b]/50 transition-colors rounded-lg active:scale-95 duration-200">
+                <span class="material-symbols-outlined">info</span>
+            </button>
+            <button class="p-2 text-[#a6aabf] hover:bg-[#1e253b]/50 transition-colors rounded-lg active:scale-95 duration-200">
+                <span class="material-symbols-outlined">settings</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Content Canvas -->
+    <div id="chatCanvas" class="flex-1 overflow-y-auto pt-24 pb-36 px-6 no-scrollbar">
+        <div class="max-w-5xl mx-auto space-y-12">
+
+            <!-- ═══ WELCOME VIEW ═══ -->
+            <div id="welcomeView">
+                <section class="text-center space-y-6">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1e253b]/50 border border-[#434759]/20">
+                        <span class="w-2 h-2 rounded-full bg-[#8ce7ff] animate-pulse"></span>
+                        <span class="text-[10px] font-bold text-[#8ce7ff] tracking-widest uppercase">System Online</span>
+                    </div>
+                    <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight text-[#e1e4fa]">
+                        Chào mừng đến với <span class="bg-gradient-to-r from-[#85adff] to-[#ac8aff] bg-clip-text text-transparent">ArXiv RAG</span>
+                    </h1>
+                    <p class="text-[#a6aabf] max-w-2xl mx-auto text-lg leading-relaxed">
+                        Hệ thống nghiên cứu thông minh thế hệ mới, giúp bạn khai phá kiến thức từ kho lưu trữ ArXiv với sức mạnh của trí tuệ nhân tạo.
+                    </p>
+                </section>
+
+                <!-- Bento Grid Feature Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 mt-12">
+                    <div class="md:col-span-8 group relative glass-panel rounded-2xl p-8 border border-[#434759]/10 hover:border-[#85adff]/30 transition-all overflow-hidden">
+                        <div class="intelligence-pulse opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        <div class="flex items-start justify-between">
+                            <div class="space-y-2">
+                                <h3 class="text-2xl font-bold text-[#e1e4fa]">Cross-lingual</h3>
+                                <p class="text-[#a6aabf] leading-relaxed">Truy vấn và tóm tắt đa ngôn ngữ. Phá bỏ rào cản ngôn ngữ trong nghiên cứu khoa học.</p>
+                            </div>
+                            <span class="material-symbols-outlined text-[#85adff] text-4xl">translate</span>
+                        </div>
+                    </div>
+                    <div class="md:col-span-4 group glass-panel rounded-2xl p-8 border border-[#434759]/10 hover:border-[#85adff]/30 transition-all flex flex-col justify-between gap-6">
+                        <span class="material-symbols-outlined text-[#ac8aff] text-4xl">bolt</span>
+                        <div class="space-y-2">
+                            <h3 class="text-xl font-bold text-[#e1e4fa]">Streaming</h3>
+                            <p class="text-sm text-[#a6aabf]">Phản hồi tức thì theo thời gian thực, không còn phải chờ đợi.</p>
+                        </div>
+                    </div>
+                    <div class="md:col-span-4 group glass-panel rounded-2xl p-8 border border-[#434759]/10 hover:border-[#85adff]/30 transition-all flex flex-col justify-between gap-6">
+                        <span class="material-symbols-outlined text-[#8ce7ff] text-4xl">travel_explore</span>
+                        <div class="space-y-2">
+                            <h3 class="text-xl font-bold text-[#e1e4fa]">Hybrid Search</h3>
+                            <p class="text-sm text-[#a6aabf]">Kết hợp Vector Search và Keyword Search để tìm kết quả chính xác nhất.</p>
+                        </div>
+                    </div>
+                    <div class="md:col-span-8 group relative glass-panel rounded-2xl p-8 border border-[#434759]/10 hover:border-[#85adff]/30 transition-all overflow-hidden">
+                        <div class="flex items-center justify-between gap-8 h-full">
+                            <div class="space-y-4 max-w-md">
+                                <h3 class="text-2xl font-bold text-[#e1e4fa]">LangGraph</h3>
+                                <p class="text-[#a6aabf]">Hệ thống lập luận phức tạp dựa trên đồ thị, cho phép các tác nhân AI làm việc cùng nhau.</p>
+                                <div class="flex gap-2">
+                                    <span class="px-3 py-1 rounded-full bg-[#85adff]/10 text-[#85adff] text-[10px] font-bold uppercase tracking-wider">Complex Reasoning</span>
+                                    <span class="px-3 py-1 rounded-full bg-[#ac8aff]/10 text-[#ac8aff] text-[10px] font-bold uppercase tracking-wider">Multi-Agent</span>
+                                </div>
+                            </div>
+                            <div class="hidden sm:flex w-24 h-24 items-center justify-center">
+                                <span class="material-symbols-outlined text-[#85adff] text-6xl" style="font-variation-settings:'FILL' 1;">hub</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══ MESSAGES AREA (Hidden until first message) ═══ -->
+            <div id="messagesArea" class="hidden space-y-8"></div>
+
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- ═══ BOTTOM INPUT BAR ═══ -->
+    <div class="fixed bottom-0 left-0 w-full flex justify-center pb-6 px-4 z-50">
+        <div class="w-full max-w-4xl bg-[#1e253b]/60 backdrop-blur-2xl rounded-2xl border border-[#434759]/15 shadow-2xl transition-all focus-within:ring-1 focus-within:ring-[#85adff]/40">
+            <form id="queryForm" onsubmit="handleSubmit(event)" class="p-2 flex items-center gap-3">
+                <div class="flex-1 px-4 py-3">
+                    <input id="queryInput" class="w-full bg-transparent border-none text-[#e1e4fa] placeholder-[#a6aabf] focus:ring-0 focus:outline-none font-['Inter'] text-sm" placeholder="Hỏi bất cứ điều gì về các bài báo khoa học..." type="text" autofocus/>
+                </div>
+                <div class="flex items-center gap-2 pr-2">
+                    <button type="submit" id="submitBtn" class="w-12 h-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-[#85adff] to-[#6e9fff] text-[#002150] shadow-lg shadow-[#85adff]/20 active:scale-95 transition-all">
+                        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">send</span>
+                    </button>
+                </div>
+            </form>
+            <div class="px-6 pb-3 flex gap-4 text-[11px] text-[#a6aabf]">
+                <button onclick="fillExample('Tóm tắt bài báo mới nhất về Transformer')" class="hover:text-[#85adff] transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">summarize</span> Tóm tắt ArXiv
+                </button>
+                <button onclick="fillExample('So sánh LoRA và QLoRA trong fine-tuning LLM')" class="hover:text-[#85adff] transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">compare_arrows</span> So sánh bài viết
+                </button>
+                <button onclick="fillExample('Giải thích Attention mechanism trong Transformer')" class="hover:text-[#85adff] transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">auto_stories</span> Giải thích thuật ngữ
+                </button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- ═══ AGENT TRACE MODAL ═══ -->
+<div id="traceModal" class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm hidden items-center justify-center" onclick="closeTrace(event)">
+    <div class="bg-[#13192b] border border-[#434759]/20 rounded-2xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto shadow-2xl" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined">account_tree</span> Agent Trace
+            </h2>
+            <button onclick="closeTrace()" class="p-2 text-[#a6aabf] hover:text-white transition-colors rounded-lg">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div id="traceContent" class="space-y-4"></div>
+    </div>
+</div>
+
+<!-- Background Ambient Glows -->
+<div class="fixed top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full -z-10 pointer-events-none"></div>
+<div class="fixed bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-secondary/5 blur-[120px] rounded-full -z-10 pointer-events-none"></div>
+
+<script src="app.js"></script>
 </body>
 </html>

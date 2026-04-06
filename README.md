@@ -1,131 +1,110 @@
-# 🧠 Cross-lingual ArXiv RAG — Trợ lý Nghiên cứu AI
+# 🧠 Event-Driven ArXiv RAG — Trợ lý Nghiên cứu AI
 
-Hệ thống trả lời câu hỏi AI/ML bằng tiếng Việt, dựa trên papers ArXiv tiếng Anh.
-
-```
-Vietnamese Query → [Translate] → English Search → [RAPTOR + Hybrid] → Vietnamese Answer
-```
-
-## 🏗️ Architecture
+Hệ thống trả lời câu hỏi AI/ML bằng tiếng Việt, dựa trên papers ArXiv.  
+Phiên bản mới nhất **v0.3** đã được refactor hoàn toàn sang kiến trúc **LlamaIndex + LangGraph + Groq Streaming** kết hợp **Kafka** để mang lại trải nghiệm phản hồi siêu tốc và hoạt động độc lập trên cấu hình máy local (P1000 GPU).
 
 ```
-User Query (VN)
-      ↓
-[Agent 1: RAG-Router]
-├─ Classify intent (Technical/Casual)
-├─ Translate VN → EN
-├─ Multi-Query Expansion (3 EN variants)
-├─ Hybrid Search (Dense + Sparse)
-└─ Reranking (bge-reranker-v2-m3)
-      ↓
-[Agent 2: Analyst + Self-check]
-├─ Generate VN answer from EN context
-├─ Citation: Theo [Paper] (Author, Year)
-└─ Self-verify numbers & terminology
-      ↓
-[Agent 3: Conditional Reviewer]
-├─ Only triggers for: numbers, formulas, comparisons
-├─ Compare VN answer vs EN source
-└─ Approve OR regenerate (max 2 retries)
-      ↓
-Final Answer (Vietnamese + citations)
+Vietnamese Query → [WebSocket] → [Kafka] → [LangGraph Pipeline] → Streaming Vietnamese Answer
 ```
+
+## 🏗️ Architecture (v0.3)
+
+Hệ thống sử dụng **Redpanda (Kafka)** làm xương sống để kết nối giữa máy chủ **Rust** (Front-facing) và các worker **Python** (Backend processing). Toàn bộ xử lý AI (LLM) đã được chuyển về Python, Rust chỉ đóng vai trò phân phối WebSockets với độ trễ cực thấp.
+
+```mermaid
+graph LR
+    subgraph "Real-time Pipeline (v0.3)"
+        C[User] -->|WebSocket| R[Rust Gateway]
+        R -->|Kafka query.request| QW[Python LangGraph Worker]
+        QW --> G[5-Node Agent Pipeline]
+        G --> R1[Router: Embedding Similarity]
+        G --> T[Translate: VN→EN]
+        G --> RET[Retrieve: Qdrant Hybrid + Reranker]
+        G --> W[Writer: Groq Streaming]
+        G --> REV[Reviewer: Fact Fact-checker]
+        W -->|Tokens| KS[Kafka query.response<br/>is_final=false]
+        REV -->|Final Ans| KF[Kafka query.response<br/>is_final=true]
+        KS --> R
+        KF --> R
+        R -->|Stream Flow| C
+    end
+```
+
+### Điểm nổi bật ở v0.3
+1. **LlamaIndex Indexer (Tốc độ & Ổn định):** 
+   - KHÔNG dùng LLM cho entity extraction nữa (tránh timeouts trên thẻ GPU yếu).
+   - Chỉ sử dụng mô hình embedding (BAAI/bge-m3) để tạo local/dense & sparse vectors.
+   - Kết quả: Giảm thời gian index từ >10 giờ xuống còn **2-3 phút** cho một mẻ 30 papers.
+2. **LangGraph Pipeline:** Flow thông minh qua 5 bước: Classifier (0-LLM, dùng Embedding) → Translation → Hybrid Search + Cross-Encoder Reranking → Generator → Fact-checker.
+3. **Groq Realtime Streaming:** Sử dụng Server-Sent Events (SSE) đẩy token trực tiếp qua Kafka channel về Rust WebSockets → Trải nghiệm typing animation như ChatGPT với thời gian chờ cho First Token dưới **1 giây**.
 
 ## 🧩 Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| **Backend** | Rust (Actix-Web) |
-| **Orchestration** | 3-Agent Pipeline |
-| **Vector DB** | Qdrant (Docker) |
-| **Embedding** | BAAI/bge-m3 (1024D) |
-| **Reranker** | bge-reranker-v2-m3 |
-| **LLM** | Groq API (LLaMA-3.3-70b) |
-| **Data Source** | ArXiv API (cs.AI) |
-| **Indexing** | RAPTOR (UMAP + GMM) |
-| **Evaluation** | Ragas + DeepEval (7 metrics) |
+| **API Gateway / WebSocket** | Rust (Actix-Web, actix-ws) |
+| **Message Broker** | Redpanda (Kafka-compatible) |
+| **Indexing / Retrieval** | LlamaIndex (Qdrant Vector Store) |
+| **Agent Orchestration** | LangGraph + LangChain Core |
+| **Vector DB** | Qdrant (Dense + Sparse Hybrid Search) |
+| **Cloud LLM (Generation)** | Groq API (LLaMA-3.3-70b / LLaMA-3.1-8b) |
+| **Local Models** | BAAI/bge-m3 (Embeddings), BGE-Reranker-v2 (Cross-Encoder) |
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Chạy Hệ Thống)
 
-### 1. Prerequisites
-
+### 1. Chuẩn bị Hạ Tầng
 ```bash
-# Docker for Qdrant
+# 1. Bật Docker (Qdrant & Redpanda)
 docker-compose up -d
 
-# Python dependencies
+# 2. Cài đặt Python requirements (Yêu cầu Python 3.10+)
 cd python && pip install -r requirements.txt
+
+# 3. Khởi tạo Kafka Topics & Qdrant Collections
+python python/kafka_workers/kafka_config.py
 ```
 
-### 2. Environment Setup
-
+### 2. Khởi động Kafka Workers (Mở 3 Terminal Python)
 ```bash
-cp .env.example .env
-# Edit .env: add GROQ_API_KEY
+# Terminal 1: Ingestion Worker (Tải & Băm nhỏ Paper thành đoạn)
+python python/kafka_workers/ingestion_worker.py
+
+# Terminal 2: LlamaIndex Indexer (Embed & Đẩy Vector vào Qdrant - siêu nhanh, không cần LLM)
+python python/kafka_workers/indexer_worker.py
+
+# Terminal 3: Query Processor (Chạy LangGraph pipeline & Phát streaming tokens)
+python python/kafka_workers/query_worker.py
 ```
 
-### 3. Data Pipeline (Offline)
-
+### 3. Khởi động Rust Web Server
 ```bash
-# Step 1: Download ArXiv papers
-python python/scripts/01_download_data.py
-
-# Step 2: Build RAPTOR tree
-python python/scripts/02_build_raptor.py
-
-# Step 3: Index to Qdrant
-python python/scripts/03_index_qdrant.py
-```
-
-### 4. Start Backend
-
-```bash
-# Start Python embedding/reranking service
-python python/scripts/embedding_server.py
-
-# Start Rust backend
+# Terminal 4: Server Gateway duy trì WebSocket & Phân phối Token
 cd rust_backend
 cargo run --release
 ```
 
-### 5. Open UI
-
-Visit `http://localhost:8080`
-
-## 📊 Evaluation
-
+### 4. Đẩy Dữ Liệu Thực Tế (Trigger)
 ```bash
-# Generate synthetic Q&A (Vietnamese questions from English papers)
-python python/scripts/04_evaluate.py
+# Terminal 5: Tải các papers mới nhất thuộc nhóm cs.AI và đẩy vào hệ thống Kafka
+python python/scripts/01_download_data.py
 ```
 
-**7 Metrics:**
-
-| Metric | Target |
-|--------|--------|
-| Faithfulness | ≥ 0.90 |
-| Context Precision | ≥ 0.80 |
-| Context Recall | ≥ 0.85 |
-| Answer Relevancy | ≥ 0.85 |
-| Answer Correctness | ≥ 0.80 |
-| Hallucination Rate | ≤ 0.10 |
-| Translation Faithfulness | ≥ 0.85 |
+### 5. Trải nghiệm
+Mở trình duyệt truy cập: `http://localhost:8080`
 
 ## 📁 Project Structure
 
 ```
 ├── python/
-│   ├── data_processing/    # ArXiv loader, cleaner, chunker
-│   ├── raptor/             # UMAP + GMM clustering, summarization
-│   ├── retrieval/          # Qdrant client (hybrid search)
-│   ├── evaluation/         # Synthetic data + 7 metrics
-│   ├── embedding_server.py # FastAPI service (embed + rerank)
-│   └── scripts/            # Pipeline scripts (01-04)
+│   ├── agents/             # Trái tim logic (LangGraph, State, Router, Translator, Writer, Reviewer)
+│   ├── indexing/           # LlamaIndex (LlamaIndexer, Hybrid Search v2)
+│   ├── data_processing/    # Công cụ chia nhỏ ArXiv Documents
+│   ├── retrieval/          # Hybrid search logic và Cross-encoder
+│   └── kafka_workers/      # Các Consumer/Producer kết nối Kafka
 ├── rust_backend/
-│   ├── src/agents/         # rag.rs, analyst.rs, compliance.rs
-│   ├── src/services/       # groq.rs, qdrant.rs, reranker.rs
-│   └── src/routes/         # query.rs (3-agent orchestration)
-├── frontend/               # Chat UI (HTML/CSS/JS)
-├── workflow.md             # Detailed pipeline documentation
-└── docker-compose.yml      # Qdrant service
+│   ├── src/services/       # Cầu nối (Kafka, Qdrant)
+│   └── src/routes/         # Endpoint duy nhất: ws.rs (WebSocket Handler)
+├── frontend/               # Chat UI HTML/CSS/JS (Hỗ trợ Live Cursor Animation & Streaming Token)
+├── docker-compose.yml      # Redpanda Kafka Broker + Redpanda Console + Qdrant Vector DB
+└── qdrant_storage/         # Thư mục chứa cơ sở dữ liệu Vector (Persistence)
 ```

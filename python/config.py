@@ -46,8 +46,12 @@ LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 ARXIV_TOPIC = os.getenv("ARXIV_TOPIC", "cs.AI")
 ARXIV_MAX_PAPERS = int(os.getenv("ARXIV_MAX_PAPERS", "30"))
 
-# ─── RAPTOR Configuration ───────────────────────────────
-RAPTOR_MAX_LEVELS = int(os.getenv("RAPTOR_MAX_LEVELS", "3"))
+# ─── Kafka Configuration ────────────────────────────────
+KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "localhost:9092")
+
+# ─── LangGraph Configuration ────────────────────────────
+LANGGRAPH_MAX_RETRIES = 2
+STREAMING_CHUNK_SIZE = 3  # Số tokens gom lại trước khi gửi qua Kafka
 
 # ─── Qdrant Configuration ───────────────────────────────
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "arxiv_raptor")
@@ -58,7 +62,7 @@ GROQ_MAX_TOKENS = 4096
 GROQ_TEMPERATURE = 0.1  # Low temperature cho câu trả lời chính xác
 
 # ─── Retrieval Configuration ────────────────────────────
-TOP_K_RETRIEVAL = 20   # Số lượng kết quả hybrid search
+TOP_K_RETRIEVAL = 10   # Số lượng kết quả hybrid search (giảm từ 20 → 10 cho P1000)
 TOP_K_RERANK = 5       # Số lượng kết quả sau reranking
 
 # ─── RRF (Reciprocal Rank Fusion) Configuration ─────────

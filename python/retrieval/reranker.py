@@ -3,28 +3,15 @@ Cross-encoder Reranking sử dụng BAAI/bge-reranker-v2-m3.
 Chấm điểm chéo từng tài liệu với câu hỏi gốc để lọc top-K chính xác nhất.
 """
 import numpy as np
-from sentence_transformers import CrossEncoder
 from rich.console import Console
 
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from config import RERANKER_MODEL, TOP_K_RERANK
+from agents.model_registry import get_reranker_model
 
 console = Console()
-
-# Singleton reranker model
-_reranker = None
-
-
-def get_reranker() -> CrossEncoder:
-    """Lazy load cross-encoder reranker."""
-    global _reranker
-    if _reranker is None:
-        console.print(f"[cyan]🔄 Đang tải mô hình reranker: {RERANKER_MODEL}...[/]")
-        _reranker = CrossEncoder(RERANKER_MODEL, max_length=512)
-        console.print(f"[green]✅ Đã tải mô hình reranker[/]")
-    return _reranker
 
 
 def rerank(
@@ -51,7 +38,7 @@ def rerank(
     if not documents:
         return []
     
-    reranker = get_reranker()
+    reranker = get_reranker_model()
     
     console.print(
         f"[cyan]🔀 Reranking {len(documents)} documents → top {top_k}...[/]"

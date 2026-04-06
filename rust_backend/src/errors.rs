@@ -8,8 +8,8 @@ pub enum AppError {
     Internal(String),
     BadRequest(String),
     NotFound(String),
-    GroqApi(String),
     Qdrant(String),
+    Kafka(String),
 }
 
 impl fmt::Display for AppError {
@@ -18,8 +18,8 @@ impl fmt::Display for AppError {
             Self::Internal(msg) => write!(f, "Internal error: {msg}"),
             Self::BadRequest(msg) => write!(f, "Bad request: {msg}"),
             Self::NotFound(msg) => write!(f, "Not found: {msg}"),
-            Self::GroqApi(msg) => write!(f, "Groq API error: {msg}"),
             Self::Qdrant(msg) => write!(f, "Qdrant error: {msg}"),
+            Self::Kafka(msg) => write!(f, "Kafka error: {msg}"),
         }
     }
 }
@@ -39,12 +39,12 @@ impl ResponseError for AppError {
                 actix_web::http::StatusCode::NOT_FOUND,
                 msg.clone(),
             ),
-            Self::GroqApi(msg) => (
-                actix_web::http::StatusCode::BAD_GATEWAY,
-                msg.clone(),
-            ),
             Self::Qdrant(msg) => (
                 actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
+                msg.clone(),
+            ),
+            Self::Kafka(msg) => (
+                actix_web::http::StatusCode::BAD_GATEWAY,
                 msg.clone(),
             ),
         };
@@ -59,11 +59,5 @@ impl ResponseError for AppError {
 impl From<anyhow::Error> for AppError {
     fn from(err: anyhow::Error) -> Self {
         Self::Internal(err.to_string())
-    }
-}
-
-impl From<reqwest::Error> for AppError {
-    fn from(err: reqwest::Error) -> Self {
-        Self::GroqApi(err.to_string())
     }
 }

@@ -6,11 +6,17 @@ FlagEmbedding>=1.2.0
 groq>=0.4.0
 python-dotenv>=1.0.0
 
-# RAPTOR
-umap-learn>=0.5.5
-scikit-learn>=1.4.0
-numpy>=1.24.0
-hdbscan>=0.8.33
+# LlamaIndex
+llama-index-core>=0.11.0
+llama-index-vector-stores-qdrant>=0.3.0
+llama-index-embeddings-huggingface>=0.3.0
+
+# LangGraph
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# Kafka
+confluent-kafka>=2.3.0
 
 # Qdrant
 qdrant-client>=1.7.0
@@ -23,7 +29,13 @@ deepeval>=0.21.0
 fastapi>=0.104.0
 uvicorn>=0.24.0
 
+# Async HTTP (for Groq calls)
+aiohttp>=3.9.0
+
 # Utilities
 tqdm>=4.66.0
 rich>=13.7.0
 tiktoken>=0.5.0
+
+# Typing
+typing_extensions>=4.8.0
