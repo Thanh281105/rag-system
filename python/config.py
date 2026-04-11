@@ -11,12 +11,10 @@ PROJECT_ROOT = Path(__file__).parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
-PROCESSED_DATA_DIR = DATA_DIR / "processed"
-SYNTHETIC_DATA_DIR = DATA_DIR / "synthetic"
 
 # Tạo thư mục nếu chưa tồn tại
-for d in [RAW_DATA_DIR, PROCESSED_DATA_DIR, SYNTHETIC_DATA_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
+RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 # ─── Load .env ───────────────────────────────────────────
 load_dotenv(ENV_FILE)

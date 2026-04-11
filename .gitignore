@@ -17,11 +17,10 @@ target/
 # Environment
 .env
 *.env.local
+.env.example
 
-# Data
+# Data (raw papers - large binaries)
 data/raw/
-data/processed/
-data/synthetic/
 
 # IDE
 .vscode/
@@ -37,5 +36,8 @@ Thumbs.db
 models_cache/
 *.onnx
 
-# Qdrant
+# Qdrant storage (local vector DB)
 qdrant_storage/
+
+# SQLite chat history (local, regenerated)
+chat_history.db

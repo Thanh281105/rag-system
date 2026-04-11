@@ -19,21 +19,15 @@ use crate::config::AppConfig;
 
 // ─── Topics ──────────────────────────────────────────────────
 
-pub const TOPIC_PAPER_UPLOADED: &str = "paper.uploaded";
+// pub const TOPIC_PAPER_UPLOADED: &str = "paper.uploaded";
+
 pub const TOPIC_QUERY_REQUEST: &str = "query.request";
 pub const TOPIC_QUERY_RESPONSE: &str = "query.response";
 
 // ─── Message Types ───────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PaperUploadedEvent {
-    pub paper_id: i64,
-    pub arxiv_id: String,
-    pub title: String,
-    pub authors: String,
-    pub year: i32,
-    pub text: String,
-}
+// PaperUploadedEvent removed as ingest is handled by Python
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryRequestEvent {
@@ -91,24 +85,25 @@ impl KafkaService {
 
     // ─── Produce Events ──────────────────────────────────
 
-    /// Publish paper uploaded event
-    pub async fn publish_paper_uploaded(&self, event: PaperUploadedEvent) -> Result<()> {
-        let payload = serde_json::to_string(&event)?;
-        let key = event.arxiv_id.clone();
+    // /// Publish paper uploaded event
+    // pub async fn publish_paper_uploaded(&self, event: PaperUploadedEvent) -> Result<()> {
+    //     let payload = serde_json::to_string(&event)?;
+    //     let key = event.arxiv_id.clone();
+    //
+    //     self.producer
+    //         .send(
+    //             FutureRecord::to(TOPIC_PAPER_UPLOADED)
+    //                 .key(&key)
+    //                 .payload(&payload),
+    //             Duration::from_secs(5),
+    //         )
+    //         .await
+    //         .map_err(|(e, _)| anyhow::anyhow!("Failed to publish paper.uploaded: {}", e))?;
+    //
+    //     info!("📤 Published paper.uploaded: {}", event.title);
+    //     Ok(())
+    // }
 
-        self.producer
-            .send(
-                FutureRecord::to(TOPIC_PAPER_UPLOADED)
-                    .key(&key)
-                    .payload(&payload),
-                Duration::from_secs(5),
-            )
-            .await
-            .map_err(|(e, _)| anyhow::anyhow!("Failed to publish paper.uploaded: {}", e))?;
-
-        info!("📤 Published paper.uploaded: {}", event.title);
-        Ok(())
-    }
 
     /// Publish query request event
     pub async fn publish_query_request(&self, event: QueryRequestEvent) -> Result<()> {
