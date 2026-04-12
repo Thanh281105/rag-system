@@ -18,7 +18,7 @@ from retrieval.hybrid_search import hybrid_search
 from retrieval.reranker import rerank
 from agents.model_registry import get_embed_model
 
-console = Console()
+from utils.console import console
 
 # Singleton
 _qdrant: QdrantWrapper | None = None

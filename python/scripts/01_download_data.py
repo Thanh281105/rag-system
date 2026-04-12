@@ -60,10 +60,34 @@ def run_download_and_publish():
             }
         ]
 
-    console.print(f"\n[bold green]✅ Chuẩn bị xong {len(docs)} papers. Đang đẩy vào Kafka...[/]")
+    console.print(f"\n[bold green]✅ Chuẩn bị xong {len(docs)} papers.[/]")
+
+    # Dedup: chỉ publish papers mới (chưa có trong lần chạy trước)
+    existing_ids = set()
+    existing_json = Path(sys.path[0]).parent / "data" / "raw" / "arxiv_papers.json"
+    if existing_json.exists():
+        try:
+            import json as _json
+            with open(existing_json, "r", encoding="utf-8") as f:
+                old_docs = _json.load(f)
+            existing_ids = {d.get("arxiv_id", "") for d in old_docs}
+        except Exception:
+            pass
+
+    new_docs = [d for d in docs if d.get("arxiv_id", "") not in existing_ids]
+    skipped = len(docs) - len(new_docs)
+
+    if skipped > 0:
+        console.print(f"[yellow]⏭️  Bỏ qua {skipped} papers đã có (dedup). Chỉ publish {len(new_docs)} papers mới.[/]")
+
+    if not new_docs:
+        console.print("[green]✅ Không có paper mới. Hệ thống đã cập nhật.[/]")
+        return
+
+    console.print(f"[cyan]Đang đẩy {len(new_docs)} papers mới vào Kafka...[/]")
 
     # 3. Publish từng paper vào Kafka topic
-    for doc in docs:
+    for doc in new_docs:
         event = {
             "paper_id": doc["id"],
             "arxiv_id": doc["arxiv_id"],
@@ -82,7 +106,7 @@ def run_download_and_publish():
 
     # Đảm bảo message được gửi đi hết
     producer.flush()
-    console.print(f"\n[bold green]🚀 Hoàn tất! 30 papers đã nằm trong hàng đợi Kafka.[/]")
+    console.print(f"\n[bold green]🚀 Hoàn tất! {len(new_docs)} papers mới đã nằm trong hàng đợi Kafka.[/]")
     console.print("[dim]Các worker sẽ tự động bắt đầu xử lý ngay bây giờ.[/]")
 
 if __name__ == "__main__":

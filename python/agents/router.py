@@ -17,7 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from agents.model_registry import get_embed_model
 
-console = Console()
+from utils.console import console
 
 # Singleton
 _technical_centroid = None
@@ -66,10 +66,13 @@ CASUAL_KEYWORDS = [
     "goodbye", "bye", "tạm biệt", "bái bai",
     # Identity
     "who are you", "bạn là ai", "tên gì", "your name",
+    # Capabilities
+    "what can you do", "bạn làm được gì", "bạn có thể làm được gì",
+    "bạn giúp gì được", "bạn biết gì", "help me", "giúp tôi",
+    "bạn có thể giúp", "có thể làm gì",
     # Smalltalk
     "how are you", "bạn khỏe không", "thời tiết",
     "weather", "joke", "funny", "haha",
-    "what can you do", "bạn làm được gì",
     # Off-topic
     "nấu ăn", "cooking", "recipe", "music", "game",
     "phim", "movie", "thể thao", "sport", "football",
@@ -107,15 +110,65 @@ def _ensure_centroids():
     console.print("[dim]  Router: centroids ready ✓[/]")
 
 
+# ─── Fast-path keyword lists ────────────────────────────
+# Exact/substring matches for instant classification (no GPU needed)
+CASUAL_FAST_PATTERNS = [
+    # Greetings
+    "xin chào", "chào bạn", "chào", "hello", "hi ", "hey",
+    # Identity / capabilities
+    "bạn là ai", "bạn là gì", "tên gì", "who are you",
+    "bạn làm được gì", "bạn có thể làm", "bạn giúp gì",
+    "bạn biết gì", "có thể làm gì", "what can you do",
+    "help me", "giúp tôi",
+    # Thanks / farewell
+    "cảm ơn", "cám ơn", "thank", "tạm biệt", "bye",
+    # Smalltalk
+    "bạn khỏe", "how are you", "thời tiết",
+]
+
+TECHNICAL_FAST_PATTERNS = [
+    # Paper / research
+    "paper", "bài báo", "nghiên cứu", "arxiv",
+    # Architecture / model
+    "transformer", "attention", "BERT", "GPT", "LLaMA", "LoRA",
+    "neural network", "mạng nơ-ron", "mô hình",
+    # Methods
+    "RAG", "retrieval", "fine-tuning", "training", "huấn luyện",
+    "embedding", "vector", "reranking",
+    # Metrics
+    "accuracy", "F1", "BLEU", "benchmark",
+]
+
+
+def _fast_classify(question: str) -> str | None:
+    """
+    Fast keyword check — O(n) string matching, ~0ms.
+    Returns 'CASUAL', 'TECHNICAL', or None (ambiguous → fall through to embedding).
+    """
+    q_lower = question.lower().strip()
+
+    # Check casual first (short questions are usually casual)
+    for pattern in CASUAL_FAST_PATTERNS:
+        if pattern in q_lower:
+            return "CASUAL"
+
+    # Check technical
+    for pattern in TECHNICAL_FAST_PATTERNS:
+        if pattern.lower() in q_lower:
+            return "TECHNICAL"
+
+    return None  # Ambiguous → use embedding
+
+
 def classify(question: str) -> str:
     """
     Phân loại intent câu hỏi: TECHNICAL hoặc CASUAL.
 
-    Sử dụng cosine similarity với precomputed cluster centroids.
-    Không tốn LLM call.
+    2-stage classification:
+    1. Fast keyword matching (~0ms) — handles obvious cases
+    2. Embedding-based cosine similarity (~3-4s) — only for ambiguous cases
 
     BIAS: Nghiêng về TECHNICAL vì đây là ArXiv RAG system.
-    Chỉ classify CASUAL khi casual_sim vượt trội hẳn (margin > 0.05).
 
     Args:
         question: Câu hỏi từ user (tiếng Việt hoặc Anh)
@@ -123,6 +176,15 @@ def classify(question: str) -> str:
     Returns:
         "TECHNICAL" hoặc "CASUAL"
     """
+    # Stage 1: Fast keyword check
+    fast_result = _fast_classify(question)
+    if fast_result is not None:
+        console.print(
+            f"[dim]  Router: FAST → {fast_result}[/]"
+        )
+        return fast_result
+
+    # Stage 2: Embedding-based (only for ambiguous questions)
     _ensure_centroids()
     model = get_embed_model()
 
@@ -145,3 +207,4 @@ def classify(question: str) -> str:
     )
 
     return intent
+

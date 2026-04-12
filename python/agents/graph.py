@@ -28,7 +28,7 @@ from agents.writer import generate_streaming, generate_casual
 from agents.reviewer import needs_review, review_with_retry
 from indexing.query_engine import retrieve_and_rerank, format_evidence
 
-console = Console()
+from utils.console import console
 
 
 # ═══════════════════════════════════════════════════════════
@@ -37,6 +37,7 @@ console = Console()
 
 def router_node(state: AgentState) -> dict:
     """Node 1: Classify intent (embedding-based, no LLM)."""
+    t0 = time.time()
     question = state["question"]
 
     # Contextualize with history
@@ -45,13 +46,15 @@ def router_node(state: AgentState) -> dict:
 
     intent = classify(contextualized_q)
 
-    console.print(f"[dim]  Router: {intent}[/]")
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  Router: {intent} ({elapsed}ms)[/]")
 
     return {
         "intent": intent,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "router_decision": intent,
+            "router_ms": elapsed,
         },
     }
 
@@ -70,31 +73,34 @@ async def casual_node(state: AgentState) -> dict:
 
 async def translate_node(state: AgentState) -> dict:
     """Node 2: Translate VN → EN."""
-    # Chỉ dịch câu hỏi gốc, KHÔNG kèm history
-    # (history context chỉ dùng ở router để classify intent)
+    t0 = time.time()
     question = state["question"]
 
     translated = await translate_to_english(question)
 
-    console.print(f"[dim]  Translated: '{translated[:60]}...'[/]")
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  Translated: '{translated[:60]}...' ({elapsed}ms)[/]")
 
     return {
         "translated_query": translated,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "translated_query": translated,
+            "translate_ms": elapsed,
         },
     }
 
 
 def retrieve_node(state: AgentState) -> dict:
     """Node 3: Hybrid Search + Rerank."""
+    t0 = time.time()
     translated_query = state.get("translated_query", state["question"])
 
     documents = retrieve_and_rerank(translated_query)
     evidence_text = format_evidence(documents)
 
-    console.print(f"[dim]  Retrieved: {len(documents)} docs, {len(evidence_text)} chars[/]")
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  Retrieved: {len(documents)} docs, {len(evidence_text)} chars ({elapsed}ms)[/]")
 
     return {
         "evidence": documents,
@@ -103,12 +109,14 @@ def retrieve_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "retrieved_count": len(documents),
             "retrieved_context": evidence_text[:500] if evidence_text else "",
+            "retrieve_ms": elapsed,
         },
     }
 
 
 async def writer_node(state: AgentState) -> dict:
     """Node 4: Generate answer with streaming."""
+    t0 = time.time()
     question = state["question"]
     evidence_text = state.get("evidence_text", "")
     stream_callback = state.get("stream_callback")
@@ -119,19 +127,22 @@ async def writer_node(state: AgentState) -> dict:
         stream_callback=stream_callback,
     )
 
-    console.print(f"[dim]  Writer: {len(answer)} chars[/]")
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  Writer: {len(answer)} chars ({elapsed}ms)[/]")
 
     return {
         "answer": answer,
         "agent_trace": {
             **(state.get("agent_trace") or {}),
             "analyst_answer": answer[:500],
+            "writer_ms": elapsed,
         },
     }
 
 
 async def reviewer_node(state: AgentState) -> dict:
     """Node 5: Conditional fact-check."""
+    t0 = time.time()
     question = state["question"]
     answer = state.get("answer", "")
     evidence_text = state.get("evidence_text", "")
@@ -149,6 +160,9 @@ async def reviewer_node(state: AgentState) -> dict:
         final_answer = answer
         reviewer_result = {"is_approved": True, "issues": [], "retry_count": 0}
 
+    elapsed = int((time.time() - t0) * 1000)
+    console.print(f"[dim]  Reviewer: ({elapsed}ms)[/]")
+
     return {
         "answer": final_answer,
         "reviewer_triggered": reviewer_triggered,
@@ -157,6 +171,7 @@ async def reviewer_node(state: AgentState) -> dict:
             **(state.get("agent_trace") or {}),
             "reviewer_triggered": reviewer_triggered,
             "reviewer_result": reviewer_result,
+            "reviewer_ms": elapsed,
         },
     }
 

@@ -28,7 +28,7 @@ GROQ_MODEL_FAST = "llama-3.1-8b-instant"
 
 # Token limits
 GROQ_FREE_TIER_MAX_INPUT_TOKENS = 4500
-GROQ_RATE_LIMIT_DELAY = 22  # Với 3 keys → mỗi key bị gọi 1/3
+GROQ_RATE_LIMIT_DELAY = 8  # Với 3 keys → mỗi key bị gọi 1/3, giảm delay
 
 # Tokenizer
 _ENCODER = tiktoken.get_encoding("cl100k_base")
@@ -158,7 +158,7 @@ async def groq_chat_complete(
                     timeout=aiohttp.ClientTimeout(total=120),
                 ) as resp:
                     if resp.status == 429:
-                        wait_time = 65 * (attempt + 1)
+                        wait_time = 25 * (attempt + 1)
                         await asyncio.sleep(wait_time)
                         api_key = _get_groq_key()
                         headers["Authorization"] = f"Bearer {api_key}"
@@ -173,7 +173,7 @@ async def groq_chat_complete(
                             messages, max_total_tokens=max(800, new_limit)
                         )
                         payload["messages"] = messages
-                        await asyncio.sleep(65)
+                        await asyncio.sleep(25)
                         continue
 
                     if resp.status != 200:
@@ -257,7 +257,7 @@ async def groq_stream_chat_complete(
                     timeout=aiohttp.ClientTimeout(total=180),
                 ) as resp:
                     if resp.status == 429:
-                        wait_time = 65 * (attempt + 1)
+                        wait_time = 25 * (attempt + 1)
                         await asyncio.sleep(wait_time)
                         api_key = _get_groq_key()
                         headers["Authorization"] = f"Bearer {api_key}"

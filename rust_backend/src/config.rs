@@ -25,9 +25,9 @@ impl AppConfig {
             host: std::env::var("HOST")
                 .unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: std::env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
+                .unwrap_or_else(|_| "8083".to_string())
                 .parse()
-                .unwrap_or(8080),
+                .unwrap_or(8083),
             kafka_brokers: std::env::var("KAFKA_BROKERS")
                 .unwrap_or_else(|_| "localhost:9092".to_string()),
         })

@@ -107,7 +107,7 @@ python python/scripts/01_download_data.py
 
 ### 5. Trải nghiệm
 
-Mở trình duyệt truy cập: `http://localhost:8080` (Mọi UI, JS, CSS sẽ tự động được phục vụ trực tiếp từ Rust server).
+Mở trình duyệt truy cập: `http://localhost:8083` (Mọi UI, JS, CSS sẽ tự động được phục vụ trực tiếp từ Rust server).
 
 ## 📁 Project Structure
 

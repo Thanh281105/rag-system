@@ -14,6 +14,7 @@ from agents.llm_client import (
     groq_complete,
     groq_stream_complete,
     GROQ_MODEL_SMART,
+    GROQ_MODEL_FAST,
 )
 
 
@@ -137,11 +138,11 @@ async def generate_streaming(
 
 
 async def generate_casual(question: str) -> str:
-    """Trả lời casual (không cần RAG)."""
+    """Trả lời casual (không cần RAG). Dùng model nhỏ cho tốc độ."""
     return await groq_complete(
         prompt=question,
         system_prompt=CASUAL_SYSTEM_PROMPT,
-        model=GROQ_MODEL_SMART,
+        model=GROQ_MODEL_FAST,
         max_tokens=256,
         temperature=0.7,
     )

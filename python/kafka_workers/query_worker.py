@@ -15,8 +15,18 @@ import asyncio
 import signal
 import json
 import sys
+import os
 import time
 from pathlib import Path
+
+# Fix Windows console encoding for Unicode emoji
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -30,7 +40,7 @@ from kafka_workers.kafka_config import (
 )
 from agents.graph import run_streaming
 
-console = Console()
+console = Console(force_terminal=True, safe_box=True)
 running = True
 
 

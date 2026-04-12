@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from config import QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION, EMBEDDING_DIM
 
-console = Console()
+from utils.console import console
 
 # English stop-words for BM25-like sparse vector
 ENGLISH_STOP_WORDS = {
@@ -113,8 +113,14 @@ class QdrantWrapper:
                 text = node.get("text", "")
                 sparse_indices, sparse_values = self._text_to_sparse(text)
 
+                # Deterministic ID: same arxiv_id + chunk → same point (upsert = overwrite)
+                arxiv_id = node.get("metadata", {}).get("arxiv_id", "")
+                node_id = node.get("node_id", i + j)
+                point_id_str = f"{arxiv_id}:chunk:{node_id}"
+                point_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, point_id_str))
+
                 point = PointStruct(
-                    id=str(uuid.uuid4()),
+                    id=point_uuid,
                     vector={
                         "dense": emb.tolist(),
                         "sparse": SparseVector(
@@ -130,7 +136,7 @@ class QdrantWrapper:
                         "doc_id": node.get("doc_id", 0),
                         "authors": node.get("metadata", {}).get("authors", ""),
                         "year": node.get("metadata", {}).get("year", 0),
-                        "arxiv_id": node.get("metadata", {}).get("arxiv_id", ""),
+                        "arxiv_id": arxiv_id,
                         "metadata": node.get("metadata", {}),
                     },
                 )

@@ -6,7 +6,7 @@ Trên P1000 4GB VRAM, load 2 lần = tràn bộ nhớ = chết.
 """
 from rich.console import Console
 
-console = Console()
+from utils.console import console
 
 _embed_model = None
 _reranker_model = None

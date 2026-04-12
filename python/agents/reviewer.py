@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from rich.console import Console
 from agents.llm_client import groq_complete, GROQ_MODEL_SMART
 
-console = Console()
+from utils.console import console
 
 REVIEWER_SYSTEM_PROMPT = """\
 You are a Reviewer Agent — a strict fact-checker for cross-lingual AI research Q&A.

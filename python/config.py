@@ -42,7 +42,7 @@ LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
 # ─── ArXiv Configuration ────────────────────────────────
 ARXIV_TOPIC = os.getenv("ARXIV_TOPIC", "cs.AI")
-ARXIV_MAX_PAPERS = int(os.getenv("ARXIV_MAX_PAPERS", "30"))
+ARXIV_MAX_PAPERS = int(os.getenv("ARXIV_MAX_PAPERS", "50"))
 
 # ─── Kafka Configuration ────────────────────────────────
 KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "localhost:9092")

@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from config import TOP_K_RETRIEVAL, RRF_DENSE_WEIGHT, RRF_SPARSE_WEIGHT, RRF_K
 from retrieval.qdrant_client import QdrantWrapper
 
-console = Console()
+from utils.console import console
 
 
 def reciprocal_rank_fusion(

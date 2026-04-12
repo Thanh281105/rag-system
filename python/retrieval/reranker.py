@@ -11,7 +11,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from config import RERANKER_MODEL, TOP_K_RERANK
 from agents.model_registry import get_reranker_model
 
-console = Console()
+from utils.console import console
 
 
 def rerank(
