@@ -113,8 +113,8 @@ def _ensure_centroids():
 # ─── Fast-path keyword lists ────────────────────────────
 # Exact/substring matches for instant classification (no GPU needed)
 CASUAL_FAST_PATTERNS = [
-    # Greetings
-    "xin chào", "chào bạn", "chào", "hello", "hi ", "hey",
+    # Greetings (chỉ match khi là CÂU NGẮN, không dùng substring lỏng)
+    "xin chào", "chào bạn", "hello", "hey",
     # Identity / capabilities
     "bạn là ai", "bạn là gì", "tên gì", "who are you",
     "bạn làm được gì", "bạn có thể làm", "bạn giúp gì",
@@ -125,6 +125,9 @@ CASUAL_FAST_PATTERNS = [
     # Smalltalk
     "bạn khỏe", "how are you", "thời tiết",
 ]
+
+# Patterns chỉ match nếu NGUYÊN CÂU rất ngắn (< 15 ký tự)
+CASUAL_SHORT_ONLY = ["chào", "hi", "hey", "ok", "ừ", "vâng"]
 
 TECHNICAL_FAST_PATTERNS = [
     # Paper / research
@@ -137,6 +140,13 @@ TECHNICAL_FAST_PATTERNS = [
     "embedding", "vector", "reranking",
     # Metrics
     "accuracy", "F1", "BLEU", "benchmark",
+    # Vietnamese technical (common questions)
+    "thuật toán", "học sâu", "học máy", "trí tuệ nhân tạo",
+    "kiến trúc", "hiệu suất", "so sánh", "đánh giá",
+    "phương pháp", "dữ liệu", "dataset",
+    # Broad question signals — bias toward technical
+    "là gì", "hoạt động", "cách", "tại sao", "như thế nào",
+    "giải thích", "khác nhau", "ưu điểm", "nhược điểm",
 ]
 
 
@@ -144,18 +154,26 @@ def _fast_classify(question: str) -> str | None:
     """
     Fast keyword check — O(n) string matching, ~0ms.
     Returns 'CASUAL', 'TECHNICAL', or None (ambiguous → fall through to embedding).
+
+    PRIORITY: TECHNICAL first (bias an toàn cho ArXiv RAG system).
     """
     q_lower = question.lower().strip()
 
-    # Check casual first (short questions are usually casual)
-    for pattern in CASUAL_FAST_PATTERNS:
-        if pattern in q_lower:
-            return "CASUAL"
-
-    # Check technical
+    # Stage A: Check TECHNICAL first (ưu tiên!)
     for pattern in TECHNICAL_FAST_PATTERNS:
         if pattern.lower() in q_lower:
             return "TECHNICAL"
+
+    # Stage B: Casual short-only (chỉ match khi câu rất ngắn)
+    if len(q_lower) < 15:
+        for pattern in CASUAL_SHORT_ONLY:
+            if q_lower.startswith(pattern) or q_lower == pattern:
+                return "CASUAL"
+
+    # Stage C: Casual substring (chỉ cho các pattern dài, ít false positive)
+    for pattern in CASUAL_FAST_PATTERNS:
+        if pattern in q_lower:
+            return "CASUAL"
 
     return None  # Ambiguous → use embedding
 

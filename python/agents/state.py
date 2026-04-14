@@ -24,6 +24,10 @@ class AgentState(TypedDict, total=False):
     evidence: list[dict]        # Retrieved & reranked chunks
     evidence_text: str          # Formatted evidence text cho LLM
 
+    # ─── Rewrite Loop (Self-Reflective RAG) ──────────
+    rewrite_count: int          # Số lần đã rewrite query (0→2)
+    is_evidence_sufficient: bool  # grade_documents quyết định
+
     # ─── Generation Output ────────────────────────────
     answer: str                 # Câu trả lời cuối cùng (full)
 

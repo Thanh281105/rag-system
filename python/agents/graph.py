@@ -1,11 +1,13 @@
 """
-LangGraph Agent Orchestration — StateGraph cho RAG pipeline.
+LangGraph Agent Orchestration — StateGraph cho RAG pipeline v0.5.
 
-Flow:
+Flow (Self-Reflective RAG):
   START → router
         ├─ CASUAL → casual_response → END
-        └─ TECHNICAL → translate → retrieve → writer_stream
-                                            → [conditional] reviewer → END
+        └─ TECHNICAL → translate → retrieve → grade_documents
+                                    ├─ GOOD → writer_stream → reviewer → END
+                                    ├─ BAD (retries < 2) → rewrite → retrieve (loop)
+                                    └─ BAD (retries >= 2) → writer_stream → reviewer → END
 
 Entry point: run_streaming(question, history, stream_callback)
 """
@@ -26,8 +28,11 @@ from agents.router import classify
 from agents.translator import translate_to_english
 from agents.writer import generate_streaming, generate_casual
 from agents.reviewer import needs_review, review_with_retry
+from agents.grader import grade_documents_node
+from agents.rewriter import rewrite_query_node
 from indexing.query_engine import retrieve_and_rerank, format_evidence
 
+from config import MAX_REWRITE_RETRIES
 from utils.console import console
 
 
@@ -185,24 +190,48 @@ def route_by_intent(state: AgentState) -> str:
     return "casual" if state.get("intent") == "CASUAL" else "technical"
 
 
+def route_by_grade(state: AgentState) -> str:
+    """
+    Branch based on document quality grading.
+
+    Returns:
+        "good"    — Evidence đủ tốt, xuống Writer
+        "rewrite" — Evidence kém, cần rewrite query
+        "give_up" — Đã hết retry, viết với evidence hiện có
+    """
+    if state.get("is_evidence_sufficient", True):
+        return "good"
+    if state.get("rewrite_count", 0) >= MAX_REWRITE_RETRIES:
+        return "give_up"
+    return "rewrite"
+
+
 # ═══════════════════════════════════════════════════════════
 # Graph Builder
 # ═══════════════════════════════════════════════════════════
 
 def build_graph() -> StateGraph:
     """
-    Build LangGraph StateGraph cho RAG pipeline.
+    Build LangGraph StateGraph cho RAG pipeline v0.5.
+
+    Flow: router → [casual|technical]
+      Technical: translate → retrieve → grade
+        ├─ good → writer → reviewer → END
+        ├─ rewrite → retrieve (loop)
+        └─ give_up → writer → reviewer → END
 
     Returns:
         Compiled StateGraph
     """
     graph = StateGraph(AgentState)
 
-    # Add nodes
+    # Add nodes (8 nodes total)
     graph.add_node("router", router_node)
     graph.add_node("casual", casual_node)
     graph.add_node("translate", translate_node)
     graph.add_node("retrieve", retrieve_node)
+    graph.add_node("grade", grade_documents_node)
+    graph.add_node("rewrite", rewrite_query_node)
     graph.add_node("writer", writer_node)
     graph.add_node("reviewer", reviewer_node)
 
@@ -222,9 +251,26 @@ def build_graph() -> StateGraph:
     # Casual → END
     graph.add_edge("casual", END)
 
-    # Technical pipeline: translate → retrieve → writer → reviewer → END
+    # Technical pipeline (Self-Reflective RAG):
+    # translate → retrieve → grade → [good|rewrite|give_up]
     graph.add_edge("translate", "retrieve")
-    graph.add_edge("retrieve", "writer")
+    graph.add_edge("retrieve", "grade")
+
+    # Conditional branching after grade
+    graph.add_conditional_edges(
+        "grade",
+        route_by_grade,
+        {
+            "good": "writer",
+            "rewrite": "rewrite",
+            "give_up": "writer",
+        },
+    )
+
+    # Rewrite → loop back to retrieve
+    graph.add_edge("rewrite", "retrieve")
+
+    # Writer → Reviewer → END
     graph.add_edge("writer", "reviewer")
     graph.add_edge("reviewer", END)
 
@@ -253,7 +299,7 @@ async def run_streaming(
     stream_callback: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> dict:
     """
-    Run full RAG pipeline with streaming.
+    Run full RAG pipeline with streaming (v0.5 — Self-Reflective).
 
     Args:
         question: Câu hỏi tiếng Việt
@@ -264,13 +310,27 @@ async def run_streaming(
     Returns:
         Final state dict chứa answer, sources, agent_trace
     """
+    # ── Langfuse tracing (non-blocking) ──
+    langfuse_trace = None
+    try:
+        from utils.observability import get_langfuse
+        lf = get_langfuse()
+        if lf:
+            langfuse_trace = lf.trace(
+                name="rag_pipeline",
+                input={"question": question, "session_id": session_id},
+                metadata={"history_len": len(history or [])},
+            )
+    except Exception:
+        pass
+
     start_time = time.time()
 
     console.print(f"[cyan]💬 Processing: '{question[:60]}...'[/]")
 
     graph = _get_graph()
 
-    # Initial state
+    # Initial state (v0.5 — includes rewrite fields)
     initial_state: AgentState = {
         "session_id": session_id,
         "question": question,
@@ -279,6 +339,8 @@ async def run_streaming(
         "translated_query": "",
         "evidence": [],
         "evidence_text": "",
+        "rewrite_count": 0,
+        "is_evidence_sufficient": True,
         "answer": "",
         "reviewer_triggered": False,
         "reviewer_result": {},
@@ -292,6 +354,20 @@ async def run_streaming(
 
     processing_time = int((time.time() - start_time) * 1000)
     final_state["processing_time_ms"] = processing_time
+
+    # ── Langfuse: cập nhật output ──
+    if langfuse_trace:
+        try:
+            langfuse_trace.update(
+                output={
+                    "answer": final_state.get("answer", "")[:500],
+                    "intent": final_state.get("intent", ""),
+                    "rewrite_count": final_state.get("rewrite_count", 0),
+                },
+                metadata=final_state.get("agent_trace", {}),
+            )
+        except Exception:
+            pass
 
     console.print(f"[green]✅ Query processed in {processing_time}ms[/]")
 

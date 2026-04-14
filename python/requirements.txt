@@ -32,6 +32,12 @@ uvicorn>=0.24.0
 # Async HTTP (for Groq calls)
 aiohttp>=3.9.0
 
+# Serverless Redis Cache
+upstash-redis>=1.1.0
+
+# Observability
+langfuse>=2.0.0
+
 # Utilities
 tqdm>=4.66.0
 rich>=13.7.0

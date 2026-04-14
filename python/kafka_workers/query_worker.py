@@ -71,11 +71,11 @@ def create_producer() -> Producer:
 
 
 def run_worker():
-    """Main loop cho query processing worker."""
-    console.print("[bold cyan]🚀 Starting Query Processing Worker (LangGraph + Streaming)...[/]")
+    """Main loop cho query processing worker (v0.5 — Cache + Self-Reflective)."""
+    console.print("[bold cyan]🚀 Starting Query Processing Worker (v0.5 — LangGraph + Cache + Langfuse)...[/]")
     console.print(f"[dim]  Listening on: {TOPIC_QUERY_REQUEST}[/]")
     console.print(f"[dim]  Publishing to: {TOPIC_QUERY_RESPONSE}[/]")
-    console.print("[dim]  Pipeline: Router → Translate → Retrieve → Writer(Stream) → Reviewer[/]")
+    console.print("[dim]  Pipeline: [Cache?] → Router → Translate → Retrieve ⇄ Grade/Rewrite → Writer → Reviewer[/]")
 
     # Pre-load models trước khi nhận query (tránh cold start timeout)
     from agents.model_registry import warmup
@@ -111,6 +111,38 @@ def run_worker():
             console.print(
                 f"[cyan]💬 Query: '{question[:60]}...' (session: {session_id[:8]})[/]"
             )
+
+            # ── Check Redis Cache FIRST ──
+            from retrieval.cache import get_cached_answer, set_cached_answer
+            cached = get_cached_answer(question)
+            if cached:
+                # CACHE HIT → bypass toàn bộ LangGraph, trả kết quả ngay (<50ms)
+                cache_response = {
+                    "session_id": session_id,
+                    "answer": cached["answer"],
+                    "sources": cached.get("sources", []),
+                    "agent_trace": {
+                        **cached.get("agent_trace", {}),
+                        "from_cache": True,
+                    },
+                    "processing_time_ms": 0,
+                    "is_final": True,
+                    "chunk_type": None,
+                }
+                producer.produce(
+                    TOPIC_QUERY_RESPONSE,
+                    key=session_id.encode("utf-8"),
+                    value=serialize(cache_response),
+                )
+                producer.flush()
+                query_count += 1
+                console.print(
+                    f"[bold green]⚡ Cache HIT — response sent for session {session_id[:8]}... "
+                    f"(query #{query_count})[/]"
+                )
+                continue  # Skip LangGraph entirely
+
+            # ── CACHE MISS → Run full LangGraph pipeline ──
 
             # Create stream callback that publishes tokens to Kafka
             def make_stream_callback(sid: str, prod: Producer):
@@ -159,11 +191,13 @@ def run_worker():
                 })
 
             # Publish final response
+            final_answer = final_state.get("answer", "")
+            final_trace = final_state.get("agent_trace", {})
             final_response = {
                 "session_id": session_id,
-                "answer": final_state.get("answer", ""),
+                "answer": final_answer,
                 "sources": sources,
-                "agent_trace": final_state.get("agent_trace", {}),
+                "agent_trace": final_trace,
                 "processing_time_ms": final_state.get("processing_time_ms", 0),
                 "is_final": True,
                 "chunk_type": None,
@@ -174,6 +208,21 @@ def run_worker():
                 value=serialize(final_response),
             )
             producer.flush()
+
+            # ── Write to Redis Cache ──
+            set_cached_answer(
+                question=question,
+                answer=final_answer,
+                sources=sources,
+                agent_trace=final_trace,
+            )
+
+            # ── Flush Langfuse immediately for real-time dashboard ──
+            try:
+                from utils.observability import flush_langfuse
+                flush_langfuse()
+            except Exception:
+                pass
 
             query_count += 1
             console.print(
@@ -208,6 +257,14 @@ def run_worker():
     loop.close()
     consumer.close()
     producer.flush()
+
+    # ── Langfuse: flush pending traces ──
+    try:
+        from utils.observability import flush_langfuse
+        flush_langfuse()
+    except Exception:
+        pass
+
     console.print(f"[yellow]👋 Query worker stopped. Total queries: {query_count}[/]")
 
 

@@ -67,3 +67,18 @@ TOP_K_RERANK = 5       # Số lượng kết quả sau reranking
 RRF_DENSE_WEIGHT = float(os.getenv("RRF_DENSE_WEIGHT", "0.6"))
 RRF_SPARSE_WEIGHT = float(os.getenv("RRF_SPARSE_WEIGHT", "0.4"))
 RRF_K = int(os.getenv("RRF_K", "60"))
+
+# ─── Upstash Redis (Serverless Cache) ───────────────────
+UPSTASH_REDIS_REST_URL = os.getenv("UPSTASH_REDIS_REST_URL", "")
+UPSTASH_REDIS_REST_TOKEN = os.getenv("UPSTASH_REDIS_REST_TOKEN", "")
+REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", str(7 * 24 * 3600)))  # 7 ngày
+
+# ─── Langfuse (Observability) ───────────────────────────
+LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
+LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+LANGFUSE_HOST = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+
+# ─── Rewrite / Self-Reflective RAG ──────────────────────
+MAX_REWRITE_RETRIES = 2           # Tối đa 2 lần rewrite (3 lần retrieve)
+MIN_GOOD_DOCS = 3                 # Cần tối thiểu 3 docs có score tốt
+GRADE_SCORE_THRESHOLD = 0.25      # Ngưỡng rerank_score coi là "tốt"

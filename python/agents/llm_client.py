@@ -20,6 +20,19 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 from config import GROQ_API_KEY, GROQ_API_KEYS
 
+# Langfuse decorator (graceful fallback if not configured)
+try:
+    from langfuse.decorators import observe as _observe
+    def observe(**kwargs):
+        """Wrapper that silently degrades if Langfuse is not configured."""
+        return _observe(**kwargs)
+except ImportError:
+    def observe(**kwargs):
+        """No-op decorator when langfuse not installed."""
+        def decorator(func):
+            return func
+        return decorator
+
 
 # ─── Constants ───────────────────────────────────────────
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -28,7 +41,7 @@ GROQ_MODEL_FAST = "llama-3.1-8b-instant"
 
 # Token limits
 GROQ_FREE_TIER_MAX_INPUT_TOKENS = 4500
-GROQ_RATE_LIMIT_DELAY = 8  # Với 3 keys → mỗi key bị gọi 1/3, giảm delay
+GROQ_RATE_LIMIT_DELAY = 2  # Groq free tier: 30 req/min ≈ 1 req/2s (đủ an toàn)
 
 # Tokenizer
 _ENCODER = tiktoken.get_encoding("cl100k_base")
@@ -121,6 +134,7 @@ async def groq_complete(
     )
 
 
+@observe(name="groq_chat_complete", as_type="generation")
 async def groq_chat_complete(
     messages: list[dict],
     model: str = GROQ_MODEL_SMART,
@@ -224,6 +238,7 @@ async def groq_stream_complete(
         yield token
 
 
+@observe(name="groq_stream_chat_complete", as_type="generation")
 async def groq_stream_chat_complete(
     messages: list[dict],
     model: str = GROQ_MODEL_SMART,
