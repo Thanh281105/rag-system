@@ -180,20 +180,7 @@ class QdrantWrapper:
             with_payload=True,
         )
 
-        return [
-            {
-                "id": str(r.id),
-                "score": r.score,
-                "text": r.payload.get("text", ""),
-                "level": r.payload.get("level", 0),
-                "doc_title": r.payload.get("doc_title", ""),
-                "node_id": r.payload.get("node_id", 0),
-                "authors": r.payload.get("authors", ""),
-                "year": r.payload.get("year", 0),
-                "arxiv_id": r.payload.get("arxiv_id", ""),
-            }
-            for r in results.points
-        ]
+        return [self._point_to_result(r) for r in results.points]
 
     def search_sparse(self, query_text: str, top_k: int = 20) -> list[dict]:
         """Tìm kiếm Sparse vector (keyword/BM25-like search)."""
@@ -207,20 +194,55 @@ class QdrantWrapper:
             with_payload=True,
         )
 
-        return [
-            {
-                "id": str(r.id),
-                "score": r.score,
-                "text": r.payload.get("text", ""),
-                "level": r.payload.get("level", 0),
-                "doc_title": r.payload.get("doc_title", ""),
-                "node_id": r.payload.get("node_id", 0),
-                "authors": r.payload.get("authors", ""),
-                "year": r.payload.get("year", 0),
-                "arxiv_id": r.payload.get("arxiv_id", ""),
-            }
-            for r in results.points
-        ]
+        return [self._point_to_result(r) for r in results.points]
+
+    def scroll_by_arxiv_ids(
+        self,
+        arxiv_ids: list[str],
+        limit_per_id: int = 3,
+    ) -> list[dict]:
+        """Fetch indexed chunks by exact arXiv ID metadata."""
+        results = []
+        seen = set()
+
+        for arxiv_id in arxiv_ids:
+            points, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="arxiv_id",
+                            match=MatchValue(value=arxiv_id),
+                        )
+                    ]
+                ),
+                limit=limit_per_id,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+            for point in points:
+                result = self._point_to_result(point)
+                if result["id"] in seen:
+                    continue
+                seen.add(result["id"])
+                results.append(result)
+
+        return results
+
+    def _point_to_result(self, point) -> dict:
+        payload = point.payload or {}
+        return {
+            "id": str(point.id),
+            "score": getattr(point, "score", 0) or 0,
+            "text": payload.get("text", ""),
+            "level": payload.get("level", 0),
+            "doc_title": payload.get("doc_title", ""),
+            "node_id": payload.get("node_id", 0),
+            "authors": payload.get("authors", ""),
+            "year": payload.get("year", 0),
+            "arxiv_id": payload.get("arxiv_id", ""),
+        }
 
     def get_collection_info(self) -> dict:
         """Lấy thông tin collection."""

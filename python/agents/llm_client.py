@@ -18,7 +18,13 @@ from typing import AsyncGenerator
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
-from config import GROQ_API_KEY, GROQ_API_KEYS
+from config import (
+    GROQ_API_KEY,
+    GROQ_API_KEYS,
+    GROQ_FAST_MODEL,
+    GROQ_RATE_LIMIT_DELAY_SECONDS,
+    LLM_MODEL,
+)
 
 # Langfuse decorator (graceful fallback if not configured)
 try:
@@ -36,12 +42,12 @@ except ImportError:
 
 # ─── Constants ───────────────────────────────────────────
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL_SMART = "llama-3.3-70b-versatile"
-GROQ_MODEL_FAST = "llama-3.1-8b-instant"
+GROQ_MODEL_SMART = LLM_MODEL
+GROQ_MODEL_FAST = GROQ_FAST_MODEL
 
 # Token limits
 GROQ_FREE_TIER_MAX_INPUT_TOKENS = 4500
-GROQ_RATE_LIMIT_DELAY = 2  # Groq free tier: 30 req/min ≈ 1 req/2s (đủ an toàn)
+GROQ_RATE_LIMIT_DELAY = GROQ_RATE_LIMIT_DELAY_SECONDS  # Groq free tier: 30 req/min ≈ 1 req/2s
 
 # Tokenizer
 _ENCODER = tiktoken.get_encoding("cl100k_base")
@@ -247,6 +253,11 @@ async def groq_stream_chat_complete(
 ) -> AsyncGenerator[str, None]:
     """Groq streaming chat completion — yield từng token chunk."""
     api_key = _get_groq_key()
+
+    if model == GROQ_MODEL_FAST:
+        messages = _truncate_messages(messages)
+        max_tokens = min(max_tokens, 1500)
+        await _respect_rate_limit()
 
     payload = {
         "model": model,

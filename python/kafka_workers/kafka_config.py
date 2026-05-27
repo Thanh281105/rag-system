@@ -1,6 +1,15 @@
 import sys
 import json
+import os
 from pathlib import Path
+
+if sys.platform == "win32":
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # Thêm root dự án vào sys.path
 sys.path.append(str(Path(__file__).parent.parent))

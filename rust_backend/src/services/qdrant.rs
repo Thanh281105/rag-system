@@ -14,8 +14,11 @@ pub struct QdrantService {
 
 impl QdrantService {
     pub async fn new(config: &AppConfig) -> Result<Self> {
-        let client = Qdrant::from_url(&config.qdrant_url).build()?;
-        info!("Connected to Qdrant: {}", config.qdrant_url);
+        let grpc_url = config.qdrant_url.replace(":6333", ":6334");
+        let client = Qdrant::from_url(&grpc_url)
+            .skip_compatibility_check()
+            .build()?;
+        info!("Connected to Qdrant: {}", grpc_url);
 
         Ok(Self {
             client,

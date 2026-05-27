@@ -30,9 +30,9 @@ from agents.writer import generate_streaming, generate_casual
 from agents.reviewer import needs_review, review_with_retry
 from agents.grader import grade_documents_node
 from agents.rewriter import rewrite_query_node
-from indexing.query_engine import retrieve_and_rerank, format_evidence
+from indexing.query_engine import retrieve_with_feedback, format_evidence
 
-from config import MAX_REWRITE_RETRIES
+from config import ENABLE_REVIEWER, MAX_REWRITE_RETRIES
 from utils.console import console
 
 
@@ -101,7 +101,10 @@ def retrieve_node(state: AgentState) -> dict:
     t0 = time.time()
     translated_query = state.get("translated_query", state["question"])
 
-    documents = retrieve_and_rerank(translated_query)
+    documents, retrieval_trace = retrieve_with_feedback(
+        translated_query,
+        original_query=state["question"],
+    )
     evidence_text = format_evidence(documents)
 
     elapsed = int((time.time() - t0) * 1000)
@@ -115,6 +118,7 @@ def retrieve_node(state: AgentState) -> dict:
             "retrieved_count": len(documents),
             "retrieved_context": evidence_text[:500] if evidence_text else "",
             "retrieve_ms": elapsed,
+            **retrieval_trace,
         },
     }
 
@@ -153,7 +157,29 @@ async def reviewer_node(state: AgentState) -> dict:
     evidence_text = state.get("evidence_text", "")
     translated_query = state.get("translated_query", "")
 
+    if not ENABLE_REVIEWER:
+        elapsed = int((time.time() - t0) * 1000)
+        console.print(f"[dim]  Reviewer: disabled ({elapsed}ms)[/]")
+        reviewer_result = {
+            "is_approved": True,
+            "issues": [],
+            "retry_count": 0,
+            "disabled": True,
+        }
+        return {
+            "answer": answer,
+            "reviewer_triggered": False,
+            "reviewer_result": reviewer_result,
+            "agent_trace": {
+                **(state.get("agent_trace") or {}),
+                "reviewer_triggered": False,
+                "reviewer_result": reviewer_result,
+                "reviewer_ms": elapsed,
+            },
+        }
+
     reviewer_triggered = needs_review(question) or needs_review(translated_query)
+
 
     if reviewer_triggered:
         console.print("[dim]  🔍 Reviewer triggered[/]")

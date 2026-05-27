@@ -16,6 +16,7 @@ from agents.llm_client import (
     GROQ_MODEL_SMART,
     GROQ_MODEL_FAST,
 )
+from config import ANSWER_MAX_TOKENS, EVIDENCE_MAX_CHARS, STREAMING_CHUNK_SIZE
 
 
 ANALYST_SYSTEM_PROMPT = """\
@@ -28,6 +29,8 @@ QUY TẮC BẮT BUỘC:
 3. Trích dẫn theo format: Theo "[Tên Paper]" (Author, Year), ...
 4. Nếu Evidence không đủ để trả lời → nói rõ "Tôi không tìm thấy thông tin này trong cơ sở dữ liệu"
 5. Câu trả lời phải bằng TIẾNG VIỆT, rõ ràng và có cấu trúc
+6. Nếu Evidence so sánh BASELINE với PHƯƠNG PHÁP ĐỀ XUẤT, phải tách rõ hai phần; không được gán đặc điểm của baseline cho phương pháp đề xuất.
+7. Không bịa ví dụ, kết quả, hoặc hạn chế. Nếu Evidence không nêu phần đó, viết "Evidence không nêu".
 
 YÊU CẦU VỀ ĐỘ CHI TIẾT (BẮT BUỘC):
 - PHẢI trích dẫn SỐ LIỆU CỤ THỂ nếu Evidence có (accuracy, F1, BLEU, parameters, latency, etc.)
@@ -45,6 +48,7 @@ SELF-CHECK:
 - Các con số có khớp CHÍNH XÁC với Evidence không?
 - Tên model/method có đúng không?
 - Kết luận có được support bởi Evidence không?
+- Có lẫn lộn baseline với phương pháp đề xuất không?
 """
 
 CASUAL_SYSTEM_PROMPT = (
@@ -65,8 +69,12 @@ def _build_user_prompt(question_vn: str, evidence_text: str) -> str:
 
     return (
         f"CÂU HỎI (tiếng Việt): {question_vn}\n\n"
-        f"EVIDENCE (từ Hybrid Search — tiếng Anh):\n{evidence_text[:6000]}\n\n"
-        f"Hãy phân tích và trả lời câu hỏi bằng TIẾNG VIỆT dựa trên evidence trên."
+        f"EVIDENCE (từ Hybrid Search — tiếng Anh):\n{evidence_text[:EVIDENCE_MAX_CHARS]}\n\n"
+        "Hãy trả lời trực tiếp bằng TIẾNG VIỆT dựa trên evidence trên.\n"
+        "Nếu Source 1 chứa thông tin liên quan trực tiếp, ưu tiên dùng Source 1.\n"
+        "Không được nói không tìm thấy thông tin khi evidence đã chứa tên paper, số liệu, hoặc câu trả lời liên quan.\n"
+        "Với câu hỏi hỏi 'từ bao nhiêu xuống bao nhiêu', phải trích đúng hai con số trong evidence.\n"
+        "Với câu hỏi hỏi 'A hay B', phải chọn trực tiếp A hoặc B trước, rồi mới giải thích."
     )
 
 
@@ -87,7 +95,7 @@ async def generate_answer(question_vn: str, evidence_text: str) -> str:
         prompt=user_prompt,
         system_prompt=ANALYST_SYSTEM_PROMPT,
         model=GROQ_MODEL_SMART,
-        max_tokens=2048,
+        max_tokens=ANSWER_MAX_TOKENS,
         temperature=0.1,
     )
 
@@ -112,20 +120,20 @@ async def generate_streaming(
 
     full_answer = ""
     token_buffer = ""
-    BUFFER_SIZE = 3  # Gom 3 tokens rồi mới gửi (giảm overhead Kafka)
+    buffer_size = STREAMING_CHUNK_SIZE
 
     async for token in groq_stream_complete(
         prompt=user_prompt,
         system_prompt=ANALYST_SYSTEM_PROMPT,
         model=GROQ_MODEL_SMART,
-        max_tokens=2048,
+        max_tokens=ANSWER_MAX_TOKENS,
         temperature=0.1,
     ):
         full_answer += token
         token_buffer += token
 
         # Flush buffer khi đủ size hoặc gặp newline
-        if len(token_buffer) >= BUFFER_SIZE or "\n" in token_buffer:
+        if len(token_buffer) >= buffer_size or "\n" in token_buffer:
             if stream_callback:
                 await stream_callback(token_buffer)
             token_buffer = ""

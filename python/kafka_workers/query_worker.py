@@ -187,7 +187,10 @@ def run_worker():
                     "authors": doc.get("authors", ""),
                     "year": doc.get("year", 0),
                     "arxiv_id": doc.get("arxiv_id", ""),
-                    "relevance_score": doc.get("rerank_score", doc.get("rrf_score", 0)),
+                    "relevance_score": doc.get(
+                        "rerank_score",
+                        doc.get("combined_score", doc.get("rrf_score", 0)),
+                    ),
                 })
 
             # Publish final response

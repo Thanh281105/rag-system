@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from agents.model_registry import get_embed_model
+from config import ROUTER_EMBEDDING_FALLBACK
 
 from utils.console import console
 
@@ -202,6 +203,10 @@ def classify(question: str) -> str:
         )
         return fast_result
 
+    if not ROUTER_EMBEDDING_FALLBACK:
+        console.print("[dim]  Router: fallback disabled → TECHNICAL[/]")
+        return "TECHNICAL"
+
     # Stage 2: Embedding-based (only for ambiguous questions)
     _ensure_centroids()
     model = get_embed_model()
@@ -225,4 +230,3 @@ def classify(question: str) -> str:
     )
 
     return intent
-

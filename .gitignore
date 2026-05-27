@@ -21,12 +21,14 @@ target/
 
 # Data (raw papers - large binaries)
 data/raw/
+data/feedback/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+logs/
 
 # OS
 .DS_Store

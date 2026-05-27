@@ -8,7 +8,7 @@ from rich.console import Console
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
-from config import RERANKER_MODEL, TOP_K_RERANK
+from config import RERANKER_BATCH_SIZE, RERANKER_MODEL, TOP_K_RERANK
 from agents.model_registry import get_reranker_model
 
 from utils.console import console
@@ -48,7 +48,11 @@ def rerank(
     pairs = [(query, doc["text"]) for doc in documents]
     
     # Chấm điểm
-    scores = reranker.predict(pairs)
+    scores = reranker.predict(
+        pairs,
+        batch_size=RERANKER_BATCH_SIZE,
+        show_progress_bar=False,
+    )
     
     # Gán điểm vào kết quả
     scored_docs = []
